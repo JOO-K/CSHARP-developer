@@ -1,0 +1,17 @@
+tools/.persona_cache.json
+tools/.build.log
+tools/.apple_cache.json
+tools/.credits_cache.json
+
+# Private work-in-progress versions (git worktrees on their own branches).
+# Never deployed: GitHub Pages serves main, and main ignores this folder.
+versions/
+
+tools/.lyrcache/
+tools/__pycache__/
+
+# Local-only dev tools copied from csharpuser (untracked there too)
+flow/
+flow.html
+flow-capture/
+snap.js
