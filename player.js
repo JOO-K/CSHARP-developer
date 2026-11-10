@@ -134,7 +134,7 @@
     return `
       <div class="cp-bg"></div>
       <div class="cp-top">
-        <button class="ds-ibtn" aria-label="Close the CD player" onclick="event.stopPropagation(); sdCpClose()">${CLOSE}</button>
+        <button class="ds-ibtn" aria-label="Close the CD player" onclick="event.stopPropagation(); sdCpClose(); if (window.sdBetaBack) sdBetaBack()">${CLOSE}</button>
         <span class="cp-credit">Previews by Deezer</span>
         <button class="cp-genre" onclick="event.stopPropagation(); sdCpGenres()">
           <svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>${esc(genreLabel())}</span>

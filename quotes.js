@@ -180,7 +180,7 @@
     return `
       <div class="qs-scroll"><div class="qs-wait"><span class="qs-spin"></span>Finding songs…</div></div>
       <div class="qs-top">
-        <button class="ds-ibtn" aria-label="Close comments mode" onclick="event.stopPropagation(); sdQuoteClose()">${ICO.close}</button>
+        <button class="ds-ibtn" aria-label="Close comments mode" onclick="event.stopPropagation(); sdQuoteClose(); if (window.sdBetaBack) sdBetaBack()">${ICO.close}</button>
         <span class="qs-credit">Previews by Deezer</span>
         <button class="cp-genre qs-genre" onclick="event.stopPropagation(); sdQuoteGenres()">
           <svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>${esc(Q.genre || '')}</span>

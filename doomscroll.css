@@ -150,7 +150,7 @@
   filter: blur(46px) saturate(1.4); opacity: .32;
 }
 .ds-main {
-  position: absolute; z-index: 1; top: 56px; bottom: 40px; left: 16px; right: 16px;   /* centred on the screen (round 8) */
+  position: absolute; z-index: 1; top: 56px; bottom: 112px; left: 16px; right: 16px;   /* centred on the screen (round 8); bottom 40 → 112 clears the nav (11-09) */
   display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 0;
 }
 
@@ -323,7 +323,16 @@
 .ds-svc.none { opacity: .25; }
 
 /* the level line: progress + the music's levels (drawViz) */
-.ds-viz { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; width: 100%; height: 72px; pointer-events: none; }   /* taller than the line: room for the sparks */
+.ds-viz { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; width: 100%; height: 26px; pointer-events: none; }   /* 72 → 26 (11-09): fits under the nav */
+/* the scrub strip: over the line, in the 27px under the nav */
+.ds-scrub { position: absolute; z-index: 3; left: 0; right: 0; bottom: 0; height: 26px; cursor: pointer; touch-action: none; }
+
+/* THE NAV IN SWIPE (csharpdeveloper, Eric 11-09: "bring the nav bar back into
+   this page"): the Trending screen's own floating nav, lifted over the feed.
+   Hidden again while a sheet is up, so it never sits on the sheet's content. */
+.ds-host .v3-bottom-nav { z-index: 195; }
+.ds-host:has(.ds-gsheet:not([hidden])) .v3-bottom-nav,
+.ds-host:has(.ds-rsheet:not([hidden])) .v3-bottom-nav { opacity: 0; pointer-events: none; }
 
 /* Reduce motion: no spinning, no bars. */
 html.sd-reduce-motion .ds-disc, html.sd-reduce-motion .ds-fx { animation: none !important; }
@@ -355,3 +364,26 @@ html.sd-reduce-motion .ds-disc, html.sd-reduce-motion .ds-fx { animation: none !
 .ds-rbody { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 10px 24px; scrollbar-width: none; }
 .ds-rbody::-webkit-scrollbar { display: none; }
 .ds-rbody .v3-rev-list { margin: 0; }
+
+/* csharpdeveloper (2026-11-09): Comments / Player in the Genres sheet */
+.ds-gmodes { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,.1); }
+.ds-gmodes-hd { font: 600 12.5px/1 var(--font-main); color: rgba(255,255,255,.55); margin-right: auto; }
+.ds-gmode { display: inline-flex; align-items: center; gap: 6px; }
+.ds-gmode-b { font: 800 8px/1 var(--font-main); letter-spacing: .05em; text-transform: uppercase; padding: 2px 4px; border-radius: 999px; background: var(--star, #e8a83c); color: #111; }
+
+/* SHORT SCREENS (csharpdeveloper 11-09): with the nav back, .ds-main is ~170px
+   shorter on a 667px phone. The CD gives way first (never under 150px), and
+   below 620px of room the song list shows four rows instead of five. */
+.ds-main { container-type: size; }
+.ds-cd { width: min(84%, 262px, max(150px, calc(100cqh - 410px))); }
+@container (max-height: 620px) {
+  .ds-tracks { height: 128px; }   /* four rows (Eric 11-09: "show 1 more song") */
+  .ds-cd { width: min(84%, 262px, max(150px, calc(100cqh - 346px))); }
+}
+/* …and the streaming icons shrink to match the three-row list (the rail is
+   outside .ds-main, so it asks the card). */
+.ds-card { container-type: size; }
+@container (max-height: 720px) {
+  .ds-rail-svcs { gap: 6px; }
+  .ds-svc-ico { width: 26px; height: 26px; border-radius: 7px; }
+}

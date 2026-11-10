@@ -714,6 +714,7 @@ window.sdOpenFromHeader = function (id) {
    the tab you left stayed on the stack and a later Back popped one of them —
    e.g. a stale album page under Settings › Edit profile. */
 window.sdNavTab = function (id) {
+  if (id === 'home') sdPostReset();
   backStack.length = 0;
   if (typeof closeSearch === 'function') closeSearch();
   navigate(id);
@@ -4522,6 +4523,11 @@ function wallPaintBrowse(scr) {
   const A = window.ARCHIVE || [];
   if (box._A === A && box._len === A.length) return;
   box._A = A; box._len = A.length;
+  wallFillBrowse(box);
+}
+/* csharpdeveloper (Eric, 2026-11-09): the Browse rails also fill the SEARCH
+   page's empty state (runSearch → .sds-browse), so the fill stands alone. */
+function wallFillBrowse(box) {
   const secs = wallBrowseSections();
   box._secs = secs;
   const chev = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
@@ -4561,6 +4567,8 @@ window.wallBrowseOpen = function (el) {
   const a = sec && sec.kind === 'album' && sec.items[+el.dataset.i];
   if (!a) return;
   sdHaptic(6);
+  const ov = el.closest('#sd-search');
+  if (ov) { ov._last = { artists: [], albums: [{ ref: a }], songs: [] }; sdsOpenResult('album', 0); return; }
   openAlbumPage(a);
 };
 window.pickWallView = function (btn) {
@@ -8374,6 +8382,7 @@ window.goToMobileScreen = function(idx) {
 
 // ── navigate() — called from screen HTML onclick ─────────────
 window.navigate = function(targetId, direction) {
+  if (targetId === 'home') sdPostReset();   // posts-since-home badge (sdPostBump)
   /* Leaving the screen leaves the dial. `renderViewer` rebuilds the shells, so
      the markup carrying `--mixing` is thrown away either way — this is what
      stops `mixHost` from being left pointing at a detached node, which would
@@ -8552,7 +8561,9 @@ function commitLog() {
   SDLOG.unlocked = false;        // posted → locked again, so Edit review is what reopens
   const subj = SDLOG.subject;
   const snap = logDrafts()[key] || {};
-  window._sdlogFromQuick = null;   // posted: the exit goes home, not back to the + list
+  /* csharpdeveloper (Eric 11-09): a post no longer goes home — the sheet closes
+     back onto the page you started from (the + list included: _sdlogFromQuick
+     stays, so closeLogSheet reopens it), and Home's icon counts the post. */
   flashLogSaved();
   /* POST REVIEW GOES HOME (0.13, Eric 2026-10-08: "after u press it it takes
      you to the homepage where it shows it being posted at the top"). Only an
@@ -8562,13 +8573,35 @@ function commitLog() {
     ? (subj.ref || (window.ARCHIVE || []).find(x => x.album === subj.title && x.artist === (subj.subtitle || '')))
     : null;
   closeLogSheet();
-  if (!album || !(snap.rating > 0 || (snap.text || '').trim())) return;
-  window._myFeedPost = {
+  if (!(snap.rating > 0 || (snap.text || '').trim())) return;
+  sdPostBump();
+  if (!album) return;
+  window._myFeedPost = {          // home's feed still leads with it when you get there
     album: album.album || subj.title, artist: album.artist || subj.subtitle || '',
     image: album.image || subj.image || '', year: album.year || subj.year || '',
     rating: snap.rating || 0, text: (snap.text || '').trim(), ref: album,
   };
-  postReviewExit();
+}
+
+/* POSTS SINCE HOME (csharpdeveloper, Eric 11-09: "the homepage icon gets
+   updated with the exponent number 1, 2, 3, 4 climbing per post … when u go to
+   homepage it resets"). One number on <html> (--sd-posts, a CSS counter), so
+   every nav that any screen renders shows it with no repainting; app.css draws
+   it as a superscript on the Home icon in the accent colour. Going home — the
+   Home tab or any navigate('home') — clears it. */
+function sdPostBump() {
+  window._sdPosts = (window._sdPosts || 0) + 1;
+  const h = document.documentElement;
+  h.style.setProperty('--sd-posts', String(window._sdPosts));
+  h.classList.add('sd-has-posts');
+  document.querySelectorAll('.v3-nav-item[title="Home"]').forEach(b => {
+    b.classList.remove('sd-post-pop'); void b.offsetWidth; b.classList.add('sd-post-pop');
+  });
+}
+function sdPostReset() {
+  window._sdPosts = 0;
+  document.documentElement.classList.remove('sd-has-posts');
+  document.documentElement.style.removeProperty('--sd-posts');
 }
 
 /* ── POST REVIEW'S EXIT (0.13, 2026-10-08) ─────────────────────────────────
@@ -9817,7 +9850,7 @@ function sdsPickRowHtml(a, i) {
   return `
     <button class="sds-row sds-row--pick" data-type="album" data-i="${i}">
       <span class="sds-thumb" style="background-image:url('${a.image}')"></span>
-      <span class="sds-row-main"><span class="sds-row-t">${_sdsEsc(a.album)}</span><span class="sds-row-s"><b>${_sdsEsc(a.artist)}</b>${a.year ? ' · ' + a.year : ''}${a.why ? ' · has &ldquo;' + _sdsEsc(a.why) + '&rdquo;' : ''}</span></span>
+      <span class="sds-row-main"><span class="sds-row-t">${_sdsEsc(a.album)}</span><span class="sds-row-s"><b>${_sdsEsc(a.artist)}</b>${a.year ? ' · ' + a.year : ''}${a.why ? ' · has &ldquo;' + _sdsEsc(a.why) + '&rdquo;' : ''}${a.tag ? ' · <i class="sds-row-tag">' + _sdsEsc(a.tag) + '</i>' : ''}</span></span>
       <span class="sds-row-go">Review</span>
     </button>`;
 }
@@ -9877,23 +9910,137 @@ function runSearch() {
          open. No rank badges (a 1-2-3 says "popular"). Same `.wall2-cell`
          markup as the wall; a cell's data-i reaches the overlay's one
          delegated tap, which opens the log sheet. Typing replaces it. */
+      /* csharpdeveloper (Eric, 2026-11-09), round 2: "albums with the rating and
+         the friends circles below that shows which friends liked it and if u
+         press the circle it shows what your friends rated it and if u click on
+         the specific one it takes u to the review … a 2 column system … and
+         above this just do a horizontal scroll of albums that u listened to or
+         listen later".
+           1. YOUR LISTENS: a sideways rail of covers marked Listened / Listen
+              later and not yet rated or written about (logDrafts).
+           2. FRIENDS REVIEWED: a 2-column grid. Cover + title + the album's
+              rating, then the stacked faces of the friends who reviewed it
+              (FRIEND_ACTIVITY, grouped by album). The faces open a sheet of
+              each friend's rating (sdsFriendSheet); a friend there opens their
+              review (openFriendReview).
+         Covers carry data-type/data-i, so a tap opens the log sheet through
+         the overlay's one delegated handler (ov._last.albums). */
       const arch = (window.ARCHIVE || []).filter(a => a && a.image);
-      const shuf = arr => { const x = arr.slice(); for (let i = x.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [x[i], x[j]] = [x[j], x[i]]; } return x; };
-      const recs = shuf(arch.filter(a => a._rec)).concat(arch.filter(a => !a._rec).sort((a, b) => (b.rating || 0) - (a.rating || 0)));
-      /* 0.13 (Eric, 2026-10-03: "instead of the 3x1 can we get like 5
-         suggestions of that style … that horizontal card"): FIVE records, as
-         the same rows a search returns (sdsPickRowHtml — cover · album over
-         artist · year · a "Review" pill), not the wall's 3-across cells. */
-      const picks = recs.slice(0, 5).map(a => ({ album: a.album, artist: a.artist, image: a.image, year: a.year, ref: a }));
+      const find = (album, artist) => arch.find(x => x.album === album && x.artist === artist);
+      const picks = [];
+      const pick = ref => { picks.push({ album: ref.album, artist: ref.artist, image: ref.image, year: ref.year, ref }); return picks.length - 1; };
+
+      const drafts = logDrafts();
+      const mine = Object.keys(drafts).filter(k => k.indexOf('album::') === 0).map(k => {
+        const d = drafts[k] || {};
+        if (!(d.listened || d.later)) return null;
+        if (d.rating > 0 || (d.text || '').trim()) return null;      // already reviewed
+        const [, album, artist] = k.split('::');
+        const snap = d.snap || {};
+        const ref = find(album, artist) || { album, artist, image: d.image || snap.image || '', year: snap.year || 0, genre: snap.genre || '', tracks: snap.tracks || 10, deezerId: snap.deezerId, artistId: snap.artistId };
+        return { ref, why: d.listened ? 'Listened' : 'Listen later' };
+      }).filter(Boolean).sort((x, y) => (x.why === y.why ? 0 : x.why === 'Listened' ? -1 : 1));
+      /* Round 4 (Eric: "we are missing the listened and listen later albums at
+         the top … lets make that a circle that rotates with the center point
+         outside the screen upper left … similar to our player mode"). A fresh
+         account has no Listened / Listen later yet, so the wheel is topped up
+         to 8 with DEMO picks off the shelf (seeded, the same every time) —
+         drop the top-up once real accounts carry listens. sdsWheelInit turns it. */
+      // Each side of the toggle gets at least 5 (demo picks top it up, seeded).
+      {
+        const rnd = seedRand('sdsl::demo');
+        const have = new Set(mine.map(m => m.ref.album + '|' + m.ref.artist));
+        const cnt = w => mine.filter(m => m.why === w).length;
+        arch.slice().sort(() => rnd() - 0.5).forEach(a => {
+          if (have.has(a.album + '|' + a.artist)) return;
+          const why = cnt('Listened') < 5 ? 'Listened' : cnt('Listen later') < 5 ? 'Listen later' : null;
+          if (!why) return;
+          have.add(a.album + '|' + a.artist);
+          mine.push({ ref: a, why });
+        });
+      }
+      const wheelItems = mine.map(m => ({ i: pick(m.ref), ref: m.ref, why: m.why }));
+      const nL = wheelItems.filter(w => w.why === 'Listened').length, nLL = wheelItems.length - nL;
+      const rail = wheelItems.length ? `
+            <div class="sds-wheel" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
+              <div class="sds-wheel-cap">
+                <div class="sds-wtog" role="tablist">
+                  <!-- round 10 (Eric: "use the icons instead"): Swipe's / the review sheet's headphones and clock -->
+                  <button type="button" class="sds-wtog-b" data-why="Listened" aria-label="Listened"><svg viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg><sup>${nL}</sup></button>
+                  <button type="button" class="sds-wtog-b" data-why="Listen later" aria-label="Listen later"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 6.5v5.5l3.5 2.2"/></svg><sup>${nLL}</sup></button>
+                </div>
+                <b class="sds-wcap-t"></b>
+                <span class="sds-wcap-s"></span>
+                <span class="sds-wcap-r"></span>
+              </div>
+            </div>` : '';
+
+      /* Round 3 (Eric: "some albums should have multiple cds and if theres too
+         many it says +whatever amount on the left side and lets show all 5
+         vinyl cds for the rating"). The mock FRIEND_ACTIVITY has ONE review per
+         album, so each album also gets 0–6 more of your friends, seeded off
+         its title (the same friends every time): a rating near the album's
+         and a short line (SDS_FRIEND_LINES). Real reviews come first. */
+      const agoMin = t => { const m = /^(\d+)\s*([mhdw])/.exec(t || ''); return m ? +m[1] * ({ m: 1, h: 60, d: 1440, w: 10080 })[m[2]] : 1e9; };
+      const FA = window.FRIEND_ACTIVITY || [];
+      const roster = [];
+      FA.forEach(f => { if (f && f.user && !roster.some(r => r.user === f.user)) roster.push(f); });
+      const groups = new Map();
+      FA.forEach(f => {
+        if (!f || !f.quote || !f.album) return;
+        const k = f.album + '|' + f.artist;
+        if (!groups.has(k)) groups.set(k, { f, list: [] });
+        const g = groups.get(k);
+        if (!g.list.some(x => x.user === f.user)) g.list.push(f);
+      });
+      const albumsF = [...groups.values()]
+        .sort((x, y) => Math.min(...x.list.map(e => agoMin(e.ago))) - Math.min(...y.list.map(e => agoMin(e.ago))))
+        .slice(0, 12);
+      ov._fgroups = [];
+      const grid = albumsF.map(g => {
+        const f = g.f;
+        const ref = find(f.album, f.artist) || { album: f.album, artist: f.artist, image: f.image, year: f.year };
+        const rnd = seedRand('sdsf::' + ref.album + '::' + ref.artist);
+        const base = +ref.rating || +f.rating || 4;
+        const extra = roster.filter(r => !g.list.some(x => x.user === r.user)).sort(() => rnd() - 0.5)
+          .slice(0, Math.floor(rnd() * 7))
+          .map(r => ({
+            user: r.user, init: r.init, grad: r.grad, album: ref.album, artist: ref.artist, image: ref.image,
+            rating: Math.max(1, Math.min(5, Math.round((base + (rnd() - 0.5) * 2) * 2) / 2)),
+            quote: SDS_FRIEND_LINES[Math.floor(rnd() * SDS_FRIEND_LINES.length)],
+            ago: (1 + Math.floor(rnd() * 6)) + 'd', likes: Math.floor(rnd() * 40), comments: Math.floor(rnd() * 9),
+          }));
+        const list = g.list.concat(extra);
+        const i = pick(ref);
+        const gi = ov._fgroups.push({ ref, list }) - 1;
+        const r = +ref.rating || (list.reduce((t, x) => t + (+x.rating || 0), 0) / list.length);
+        const SHOWN = 3;
+        const faces = list.slice(0, SHOWN).map(x => `<span class="sds-fface" style="background-image:url('${feedFace(x.user)}')"></span>`).join('');
+        const more = list.length > SHOWN ? `<span class="sds-fface sds-fface--more">+${list.length - SHOWN}</span>` : '';
+        return `
+            <div class="sds-fcard">
+              <button class="sds-fcard-art" data-type="album" data-i="${i}" style="background-image:url('${ref.image}')" aria-label="Review ${_sdsEsc(ref.album)}"></button>
+              <div class="sds-fcard-t" data-type="album" data-i="${i}">${_sdsEsc(ref.album)}</div>
+              <div class="sds-fcard-s">${_sdsEsc(ref.artist)}</div>
+              ${r ? `<div class="sds-fcard-r">${sdsDiscsHtml(r)}<b>${r.toFixed(1)}</b></div>` : ''}
+              <button class="sds-fstack" type="button" onclick="event.stopPropagation(); sdsFriendSheet(${gi})" aria-label="${list.length} friend${list.length === 1 ? '' : 's'} reviewed it">${more}${faces}</button>
+            </div>`;
+      }).join('');
+
       ov._last = { artists: [], albums: picks, songs: [] };
       resEl.innerHTML = `
-        <div class="sds-sec">
-          <div class="sds-sec-hd">Recommended albums</div>
-          ${picks.map(sdsPickRowHtml).join('')}
-        </div>`;
+        ${rail ? `<div class="sds-sec sds-sec--wheel">${rail}</div>` : ''}
+        ${grid ? `<div class="sds-sec"><div class="sds-fgrid">${grid}</div></div>` : ''}`;
+      const wh = resEl.querySelector('.sds-wheel');
+      if (wh) sdsWheelInit(wh, wheelItems);
       return;
     }
-    resEl.innerHTML = sdsZeroHtml(ov);   // sets ov._last for the rail
+    /* csharpdeveloper (Eric, 2026-11-09): "put the trending page … on the
+       search page below the search bar as suggestions". The empty search shows
+       Trending's Browse rails (wallFillBrowse); the old trending-searches list
+       (sdsZeroHtml) is kept, unused. */
+    resEl.innerHTML = '<div class="wall2-browse sds-browse"></div>';
+    wallFillBrowse(resEl.firstElementChild);
     return;
   }
 
@@ -10005,6 +10152,242 @@ function sdsOpenResult(type, i) {
   window._sdsPending = null;   // taken by the open's snapshot, or nothing opened — never left for a later one
 }
 
+/* THE LISTENS WHEEL (csharpdeveloper, Eric 2026-11-09): the + list's
+   Listened / Listen later covers as CDs on a big circle whose centre sits off
+   the screen's upper left, so only the lower-right arc shows — the Player's
+   ring (player.js) turned into a picker. Drag along it (or wheel / trackpad)
+   to turn it; it carries momentum and settles with one CD at the FOCUS angle,
+   bigger, its title and Listened / Listen later in the hub's corner. Tap the
+   focused CD → the review sheet (the overlay's delegated data-type/data-i
+   click); tap another → it turns into focus. Bounded, not infinite: a few
+   listens repeating round the ring would read as a bug. */
+function sdsWheelInit(el, items) {
+  /* The + list's Listened / Listen later ring (csharpdeveloper, Eric 11-09).
+       · round 5: square covers; a toggle in the corner over the focused
+         album's name (big), artist (small) and big score.
+       · round 6: the FOCUS cover is exactly a grid card (same width, same
+         16px from the wall); the rest small; INFINITE like player.js (slot i
+         holds item i mod n, elements only for the slots in sight).
+       · round 9 (Eric: "get rid of the review under the album … more of the
+         bottom of a larger ring and the smaller albums can come out from the
+         corner of the featured album, the lower left corner"): the small
+         covers ride the LOWER part of a big ring (centre far off the upper
+         left), starting at the focus cover's lower-left corner and flattening
+         toward the ring's bottom as they go left. Between slot 1 and the focus
+         a cover slides corner → centre and grows. */
+  const cap = el.querySelector('.sds-wheel-cap');
+  const DEG = Math.PI / 180, SMALL = 82, SPACING = 58, TILT = 58 * DEG;   // TILT: the ring's angle at the corner (90° = its bottom)
+  const W = { pos: 0, vel: 0, raf: 0, drag: null, moved: false, focus: null, why: '', list: [], els: new Map() };
+  const mod = (i, n) => ((i % n) + n) % n;
+  const geo = () => {
+    const w = el.clientWidth || 375;
+    const big = (w - 32 - 12) / 2;                           // .sds-fgrid: 16px gutters, 12px gap
+    const px = w - 16 - big / 2, py = big / 2 + 4;           // the focus cover's centre
+    const ax = px - big / 2 + 12, ay = py + big / 2 - 12;    // its lower-left corner, a touch in
+    const r = 2 * w;
+    return { px, py, ax, ay, r, cx: ax - r * Math.cos(TILT), cy: ay - r * Math.sin(TILT), k: big / SMALL };
+  };
+  const n = () => W.list.length;
+  const itemAt = i => W.list[mod(i, n())];
+  function slotXY(d, g) {
+    if (d >= 1) {
+      const t = TILT + (d - 1) * SPACING / g.r;
+      return { x: g.cx + g.r * Math.cos(t), y: g.cy + g.r * Math.sin(t), sc: 1 };
+    }
+    if (d >= 0) return { x: g.px + (g.ax - g.px) * d, y: g.py + (g.ay - g.py) * d, sc: g.k + (1 - g.k) * d };
+    return { x: g.px - d * 30, y: g.py + d * 16, sc: g.k };   // turned past: drifts up-right behind and fades
+  }
+  function paint() {
+    if (!n()) return;
+    const g = geo();
+    const lo = Math.floor(W.pos) - 1, hi = Math.ceil(W.pos) + 8;
+    const want = new Set();
+    for (let i = lo; i <= hi; i++) {
+      want.add(i);
+      let b = W.els.get(i);
+      const it = itemAt(i);
+      if (!b) {
+        b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'sds-wcd';
+        b.dataset.type = 'album';
+        b.dataset.i = it.i;
+        b.dataset.slot = i;
+        b.setAttribute('aria-label', 'Review ' + it.ref.album);
+        b.innerHTML = '<span class="sds-wcd-disc"></span>';
+        b.firstChild.style.backgroundImage = `url('${it.ref.image}')`;
+        el.appendChild(b);
+        W.els.set(i, b);
+      }
+      const d = i - W.pos, p = slotXY(d, g);
+      const op = d < 0 ? Math.max(0, 1 + d * 2) : Math.max(0, Math.min(1, 1.6 - d * 0.18));
+      b.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -50%) scale(${p.sc.toFixed(3)})`;
+      b.style.opacity = op.toFixed(3);
+      b.style.zIndex = String(100 - Math.round(Math.abs(d) * 10));
+      b.style.pointerEvents = op < 0.15 ? 'none' : '';
+    }
+    W.els.forEach((b, i) => { if (!want.has(i)) { b.remove(); W.els.delete(i); } });
+    const f = Math.round(W.pos);
+    if (f !== W.focus) {
+      W.focus = f;
+      W.els.forEach((b, i) => b.classList.toggle('is-focus', i === f));
+      const it = itemAt(f), r = +it.ref.rating || 0;
+      cap.querySelector('.sds-wcap-t').textContent = it.ref.album;
+      cap.querySelector('.sds-wcap-s').textContent = it.ref.artist;
+      cap.querySelector('.sds-wcap-r').innerHTML = r ? `<b>${r.toFixed(1)}</b>${sdsDiscsHtml(r)}` : '';
+      if (W.drag || W.vel) sdHaptic(4);
+    }
+  }
+  function show(why) {
+    W.why = why;
+    cap.querySelectorAll('.sds-wtog-b').forEach(b => b.classList.toggle('on', b.dataset.why === why));
+    W.list = items.filter(it => it.why === why);
+    W.els.forEach(b => b.remove()); W.els.clear();
+    W.focus = null; W.vel = 0;
+    if (!n()) { cap.querySelector('.sds-wcap-t').textContent = 'Nothing here yet'; cap.querySelector('.sds-wcap-s').textContent = ''; cap.querySelector('.sds-wcap-r').innerHTML = ''; return; }
+    W.pos = 1.6; paint(); settle(0);                          // a short turn in, so it reads as a ring
+  }
+  function settle(target) {
+    cancelAnimationFrame(W.raf);
+    const run = () => {
+      if (!el.isConnected || !n()) return;
+      if (target == null) {
+        W.pos += W.vel * 16; W.vel *= 0.93;
+        if (Math.abs(W.vel) < 0.002) { W.vel = 0; target = Math.round(W.pos); }
+      } else {
+        W.pos += (target - W.pos) * 0.18;
+        if (Math.abs(target - W.pos) < 0.002) { W.pos = target; paint(); return; }
+      }
+      paint();
+      W.raf = requestAnimationFrame(run);
+    };
+    W.raf = requestAnimationFrame(run);
+  }
+  // A drag along the trail: up-right pulls the next cover into focus, down-left pushes back.
+  const along = (dx, dy) => (dx * 0.8 - dy * 0.6) / SPACING;
+  el.addEventListener('pointerdown', e => {
+    if (e.button > 0 || e.target.closest('.sds-wtog') || !n()) return;
+    cancelAnimationFrame(W.raf);
+    W.drag = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), id: e.pointerId };
+    W.moved = false; W.vel = 0;
+    /* ⚠ No pointer capture HERE: a captured pointer's click is sent to the
+       wheel itself, not the cover under it, so a plain mouse click on the
+       focus cover never reached the review (Eric, on PC, round 11). It is
+       captured once a real drag starts (pointermove, past 7px). */
+  });
+  el.addEventListener('pointermove', e => {
+    const D = W.drag;
+    if (!D) return;
+    if (!W.moved && Math.hypot(e.clientX - D.x, e.clientY - D.y) < 7) return;
+    if (!W.moved) { try { el.setPointerCapture(D.id); } catch (err) {} }
+    W.moved = true;
+    const dp = along(e.clientX - D.lx, e.clientY - D.ly);
+    D.lx = e.clientX; D.ly = e.clientY;
+    const now = performance.now(), dt = Math.max(1, now - D.t);
+    W.pos += dp;
+    W.vel = 0.7 * W.vel + 0.3 * (dp / dt);
+    D.t = now;
+    paint();
+  });
+  const up = () => { if (!W.drag) return; W.drag = null; if (W.moved) settle(null); };
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('click', e => {
+    const t = e.target.closest('.sds-wtog-b');
+    if (t) { e.stopPropagation(); e.preventDefault(); if (t.dataset.why !== W.why) { sdHaptic(6); show(t.dataset.why); } return; }
+    if (W.moved) { e.stopPropagation(); e.preventDefault(); W.moved = false; return; }
+    const b = e.target.closest('.sds-wcd');
+    if (b && +b.dataset.slot !== W.focus) { e.stopPropagation(); e.preventDefault(); sdHaptic(6); settle(+b.dataset.slot); }
+  }, true);
+  el.addEventListener('wheel', e => {
+    if (!n()) return;
+    const dv = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+    e.preventDefault();
+    W.pos += dv / 120;
+    paint();
+    clearTimeout(W.wt);
+    W.wt = setTimeout(() => settle(Math.round(W.pos)), 110);
+  }, { passive: false });
+  show(items.some(it => it.why === 'Listened') ? 'Listened' : 'Listen later');
+}
+
+/* csharpdeveloper (2026-11-09): the + list's friend faces → each friend's
+   rating for that album; a friend opens their review on the album page. The
+   search is stashed first (sdsStash), so Back comes back to this list. */
+const SDS_FRIEND_LINES = [
+  'on repeat all week', 'better every listen', 'not my thing but i get it',
+  'the middle stretch is perfect', 'grew on me fast', 'a few skips, mostly great',
+  'production is unreal', 'exactly what i needed this month', 'overrated, still good',
+  'the closer wrecked me', 'front to back, no notes', 'took a while to click',
+];
+// Five vinyl discs, each filled by how much of it the rating covers (4.5 → four full, one half).
+function sdsDiscsHtml(r) {
+  return '<span class="sds-discs">' + [0, 1, 2, 3, 4].map(n => {
+    const p = Math.round(Math.max(0, Math.min(1, r - n)) * 100);
+    return `<i class="sds-disc" style="--p:${p}%"></i>`;
+  }).join('') + '</span>';
+}
+window.sdsFriendSheet = function (gi) {
+  const ov = document.getElementById('sd-search');
+  const g = ov && ov._fgroups && ov._fgroups[gi];
+  if (!g) return;
+  sdHaptic(6);
+  let sh = ov.querySelector('.sds-fsheet');
+  if (!sh) {
+    sh = document.createElement('div');
+    sh.className = 'sds-fsheet';
+    sh.innerHTML = '<div class="sds-fsheet-scrim"></div><div class="sds-fsheet-panel"></div>';
+    sh.querySelector('.sds-fsheet-scrim').addEventListener('click', e => { e.stopPropagation(); sdsFriendSheetClose(); });
+    ov.querySelector('.sds-panel').appendChild(sh);
+  }
+  const chev = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+  sh.querySelector('.sds-fsheet-panel').innerHTML = `
+      <div class="sds-fsheet-nub" onclick="event.stopPropagation(); sdsFriendSheetClose()"></div>
+      <div class="sds-fsheet-hd">
+        <span class="sds-fsheet-art" style="background-image:url('${g.ref.image}')"></span>
+        <span class="sds-fsheet-ttl"><b>${_sdsEsc(g.ref.album)}</b><span>What your ${g.list.length} friend${g.list.length === 1 ? '' : 's'} rated it</span></span>
+      </div>
+      ${g.list.map((f, n) => { const q = String(f.quote || '').replace(/^["“]|["”]$/g, ''); return `
+      <button class="sds-fsheet-row" type="button" onclick="event.stopPropagation(); sdsFriendOpen(${gi}, ${n})">
+        <span class="sds-fface sds-fface--lg" style="background-image:url('${feedFace(f.user)}')"></span>
+        <span class="sds-fsheet-main"><b>@${_sdsEsc(f.user)}</b><span>${_sdsEsc(q)}</span></span>
+        <span class="sds-fsheet-r">${sdsDiscsHtml(+f.rating || 0)}<b>${(+f.rating || 0).toFixed(1)}</b></span>
+        ${chev}
+      </button>`; }).join('')}`;
+  requestAnimationFrame(() => sh.classList.add('open'));
+};
+window.sdsFriendSheetClose = function () {
+  const sh = document.querySelector('#sd-search .sds-fsheet');
+  if (sh) sh.classList.remove('open');
+};
+/* A friend's review on the album page: openFriendReview's door, for an entry
+   that may be a seeded one (not in FRIEND_ACTIVITY). */
+window.sdsFriendOpen = function (gi, n) {
+  const ov = document.getElementById('sd-search');
+  const g = ov && ov._fgroups && ov._fgroups[gi];
+  const f = g && g.list[n];
+  if (!f) return;
+  sdsFriendSheetClose();
+  sdsStash(ov);
+  closeSearch();
+  CMT_OPEN[feedRevKey(f)] = true;
+  openAlbumPage(g.ref, {
+    album: f.album, name: f.user, init: f.init, grad: f.grad,
+    rating: f.rating, text: f.quote, ago: f.ago, likes: f.likes, comments: f.comments,
+  });
+  window._sdsPending = null;
+  setTimeout(() => {
+    homeShells().forEach(sh => {
+      const body = sh.querySelector('.v3-body');
+      const target = sh.querySelector('.v3-rev-list');
+      if (!body || !target) return;
+      const scale = body.getBoundingClientRect().width / body.offsetWidth || 1;
+      const top = (target.getBoundingClientRect().top - body.getBoundingClientRect().top) / scale + body.scrollTop - 130;
+      body.scrollTo({ top: Math.max(top, 0), behavior: 'smooth' });
+    });
+  }, 150);
+};
+
 function ensureSearchOverlay() {
   let ov = document.getElementById('sd-search');
   if (ov) return ov;
@@ -10113,7 +10496,7 @@ function sdsRestore(st) {
     openSearch(host, st.mode === 'review' ? 'review' : 'browse', true);
     const ov = document.getElementById('sd-search');
     if (!ov) return;
-    ov._cat = st.cat || 'all';
+    ov._cat = 'all';   // csharpdeveloper: no tabs any more, always All
     ov.querySelectorAll('.sds-tab').forEach(x => x.classList.toggle('active', x.dataset.cat === ov._cat));
     const inp = ov.querySelector('.sds-input');
     inp.value = st.q || '';

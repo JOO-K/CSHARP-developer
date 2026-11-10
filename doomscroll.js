@@ -434,13 +434,14 @@
   function shellHtml() {
     return `
       <div class="ds-top">
-        <button class="ds-ibtn ds-close" aria-label="Close scroll mode" onclick="event.stopPropagation(); sdDoomClose()">${ICO.close}</button>
+        <button class="ds-ibtn ds-close" aria-label="Close scroll mode" onclick="event.stopPropagation(); sdDoomExit()">${ICO.close}</button>
         <span class="ds-credit">Previews by Deezer</span>
         <div class="ds-topr">
         <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}</button>
         </div>
       </div>
       <div class="ds-scroll"></div>
+      <div class="ds-scrub" aria-label="Seek" role="slider"></div>
       <div class="ds-rsheet" hidden>
         <div class="ds-rscrim" onclick="event.stopPropagation(); sdDoomReviewsClose()"></div>
         <div class="ds-rpanel">
@@ -463,6 +464,15 @@
           <div class="ds-gnub"></div>
           <div class="ds-ghd"><b>Genres</b><button class="ds-gclear" onclick="sdDoomGenreClear()">Show everything</button></div>
           <div class="ds-glist"></div>
+          <!-- csharpdeveloper (Eric, 2026-11-09): "can we have comment mode and
+               player mode the beta features accessible inside the trending
+               genres tab". The Trending tab row is gone (Trending = Swipe), so
+               the other two views live here. No backticks: template literal. -->
+          <div class="ds-gmodes">
+            <span class="ds-gmodes-hd">Other modes</span>
+            <button class="ds-gb ds-gmode" onclick="event.stopPropagation(); sdDoomBeta('qs')">Comments<span class="ds-gmode-b">beta</span></button>
+            <button class="ds-gb ds-gmode" onclick="event.stopPropagation(); sdDoomBeta('cp')">Player<span class="ds-gmode-b">beta</span></button>
+          </div>
           <button class="ds-ggo" onclick="sdDoomGenreCommit()" hidden>Pick genres</button>
         </div>
       </div>`;
@@ -731,7 +741,7 @@
      preview plays through. Levels are an average of the AnalyserNode's
      spectrum, recorded per slot (LV_N across the width) and reset per song.
      Without an analyser it is a plain progress bar. */
-  const LV_N = 160, LINE_H = 3;
+  const LV_N = 160, LINE_H = 2;
   function lvReset() { DS.lv = new Float32Array(LV_N); DS.lvAt = -1; DS.parts = []; }
   function lvLevel() {
     if (!DS.an || !DS.bins) return 0;
@@ -753,6 +763,8 @@
      reduce motion keeps the ribbon and drops the sparks and the ripple. */
   const SPARK_MAX = 160;
   function drawViz() {
+    // The screen under the feed was replaced (a re-render): take the feed and its audio down with it.
+    if (DS.root && !DS.root.isConnected) { window.sdDoomClose(); return; }
     DS.raf = requestAnimationFrame(drawViz);
     const card = cardAt(DS.active), cv = card && card.querySelector('.ds-viz');
     if (!cv) return;
@@ -787,7 +799,7 @@
     const last = Math.max(0, Math.ceil(prog * LV_N) - 1);
     let lo = 1, hi = 0;
     for (let k = 0; k <= last; k++) { const v = DS.lv[k]; if (v > 0) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
-    const span = Math.max(0.04, hi - lo), ROOM = 28;
+    const span = Math.max(0.04, hi - lo), ROOM = 13;   /* 28 → 13: a shorter line under the nav (csharpdeveloper 11-09) */
     const norm = v => v > 0 ? Math.min(1, (v - lo) / span) : 0;
     const raw = [];
     for (let k = 0; k <= last; k++) raw.push(DS.lv[k] > 0 ? 0.24 + 0.76 * Math.pow(norm(DS.lv[k]), 1.15) : 0);
@@ -830,7 +842,7 @@
       g.fillStyle = star;
       g.fillRect(0, base, px, LINE_H);
       // the playhead: a small bright bead
-      g.beginPath(); g.arc(px, endY, 2.2, 0, Math.PI * 2);
+      g.beginPath(); g.arc(px, DS.scrubbing ? base + LINE_H / 2 : endY, DS.scrubbing ? 5 : 2.2, 0, Math.PI * 2);
       g.fillStyle = '#fff'; g.globalAlpha = 0.9; g.fill(); g.globalAlpha = 1;
     }
 
@@ -1022,6 +1034,7 @@
       e.stopPropagation(); haptic();
       playTrack(i, +li.dataset.n);
     });
+    wireScrub(root.querySelector('.ds-scrub'));
     DS.scroller.addEventListener('scroll', e => {     // scroll doesn't bubble: catch the song lists' own
       if (e.target.classList && e.target.classList.contains('ds-tracks')) fadeTracks(e.target);
     }, true);
@@ -1034,6 +1047,35 @@
     }
     else requestAnimationFrame(() => root.classList.add('open'));
   };
+
+  /* SCRUBBING (csharpdeveloper, Eric 11-09: "make it so u can actually scrub
+     the audio"). A strip along the bottom, under the nav, over the level line:
+     press or drag to seek the playing preview. Capture only once pressed ON the
+     strip, so the feed's own swipe never sees it. The levels already drawn
+     stay; a jump forward starts recording afresh from the new spot. */
+  function wireScrub(bar) {
+    if (!bar) return;
+    const seek = e => {
+      const el = DS.audio;
+      if (!el || !el.duration || !isFinite(el.duration)) return;
+      const r = bar.getBoundingClientRect();
+      const f = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width || 1)));
+      try { el.currentTime = f * el.duration; } catch (err) {}
+      DS.lvAt = -1;
+    };
+    bar.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
+      e.stopPropagation();
+      DS.scrubbing = true; bar.classList.add('on');
+      try { bar.setPointerCapture(e.pointerId); } catch (err) {}
+      seek(e); haptic();
+    });
+    bar.addEventListener('pointermove', e => { if (DS.scrubbing) seek(e); });
+    const end = () => { DS.scrubbing = false; bar.classList.remove('on'); };
+    bar.addEventListener('pointerup', end);
+    bar.addEventListener('pointercancel', end);
+    bar.addEventListener('click', e => e.stopPropagation());
+  }
 
   /* The circle reveal: the feed opens as a circle growing out of the CD's
      centre (clip-path), so coming back from the reviews / artist page still
@@ -1307,8 +1349,10 @@
     if (mode !== 'album') setTimeout(() => { if (typeof fbGlideToReviews === 'function') fbGlideToReviews(); }, 450);
   };
   function resumeDoom(st, tries) {
-    const btn = [...document.querySelectorAll('.s-wall2 .ds-swipe, .s-wall2 .ds-entry')].find(e => e.offsetParent !== null);
-    if (!btn) { if ((tries || 0) < 40) setTimeout(() => resumeDoom(st, (tries || 0) + 1), 60); return; }
+    // csharpdeveloper: Trending has no Swipe button any more — the screen itself is the host.
+    const btn = [...document.querySelectorAll('.s-wall2')].find(e => e.offsetParent !== null);
+    if (!btn) { if ((tries || 0) < 40) setTimeout(() => resumeDoom(st, (tries || 0) + 1), 60); else DS.resuming = false; return; }
+    DS.resuming = false;
     DS.genres = st.genres; DS.mode = st.mode || 'foryou';
     activePicks().forEach(g => { const h = gcRead()[g.toLowerCase()]; if (h) adoptGenre(g, h.albums); });
     window.sdDoomOpen(btn, st);
@@ -1332,6 +1376,7 @@
         st.reveal = !coverSeen;
         DS.landingMorph = coverSeen;                  // the cover's glide aims at our CD
         setTimeout(() => { DS.landingMorph = false; }, 1200);
+        DS.resuming = true;                           // TRENDING IS SWIPE: the auto-open stands down
         setTimeout(() => resumeDoom(st), 0);
       }
       return out;
@@ -1363,7 +1408,11 @@
 
   const _navTab = window.sdNavTab;
   if (typeof _navTab === 'function') {
-    window.sdNavTab = function () { DS.resume = null; return _navTab.apply(this, arguments); };
+    window.sdNavTab = function (id) {
+      // With the nav shown over Swipe (11-09), Trending's own icon is "you are here": a no-op.
+      if (id === 'wall' && DS.root && DS.root.isConnected) return;
+      DS.resume = null; return _navTab.apply(this, arguments);
+    };
   }
 
   /* REVIEWS WHILE YOU LISTEN (round 22). The left rail's Reviews opens a sheet
@@ -1401,11 +1450,43 @@
      playing over the next screen. */
   const _navigate = window.navigate;
   if (typeof _navigate === 'function') {
-    window.navigate = function () {
+    window.navigate = function (id) {
       if (DS.root) window.sdDoomClose();
-      return _navigate.apply(this, arguments);
+      const out = _navigate.apply(this, arguments);
+      if (id === 'wall') trendingOpen();
+      return out;
     };
   }
+
+  /* TRENDING IS SWIPE (csharpdeveloper, Eric 2026-11-09: "take out the
+     trending options at the top and just put swipe mode as the trending
+     option"). Landing on the Trending screen opens Swipe over it, once the
+     screen has painted. A Back that is resuming the feed (DS.resuming) opens
+     it itself, with its place kept, so this stands down. The X leaves
+     Trending for Home rather than uncovering an empty page. */
+  function trendingOpen(tries) {
+    if (DS.resuming || DS.root) return;
+    const scr = [...document.querySelectorAll('.s-wall2')].find(e => e.offsetParent !== null);
+    if (!scr) { if ((tries || 0) < 40) setTimeout(() => trendingOpen((tries || 0) + 1), 60); return; }
+    window.sdDoomOpen(scr);
+  }
+  /* The beta views from the Genres sheet; their X comes back to Swipe (sdBetaBack). */
+  window.sdDoomBeta = function (kind) {
+    const scr = DS.root && DS.root.closest('.app-screen');
+    if (!scr) return;
+    window.sdDoomGenreClose();
+    if (kind === 'qs' && typeof window.sdQuoteOpen === 'function') window.sdQuoteOpen(scr);
+    else if (kind === 'cp' && typeof window.sdCpLaunch === 'function') window.sdCpLaunch(scr);
+  };
+  window.sdBetaBack = function () { setTimeout(() => trendingOpen(), 0); };
+  window.sdDoomExit = function () {
+    const onWall = !!(DS.root && DS.root.closest('.s-wall2'));
+    window.sdDoomClose();
+    if (onWall && typeof sdNavTab === 'function') sdNavTab('home');
+  };
+  // Booted straight onto Trending (?screen=wall): open it there too.
+  const _trBoot = () => setTimeout(() => trendingOpen(), 300);
+  if (document.readyState === 'complete') _trBoot(); else window.addEventListener('load', _trBoot);
 
   /* SHARE (round 26): the app's own share sheet (share.js) with this album's
      card — your rating and words on it if you have them, else just the

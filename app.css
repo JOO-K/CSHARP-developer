@@ -13942,3 +13942,207 @@ html.sd-reduce-motion *, html.sd-reduce-motion *::before, html.sd-reduce-motion 
 .wb-ev svg { width: 15px; height: 15px; opacity: .35; flex-shrink: 0; }
 .s-home-v3--light .wb-ev { color: #1a1208; border-top-color: rgba(26,18,8,.1); }
 .s-home-v3--light .wb-ev-date { background: rgba(26,18,8,.06); }
+
+/* csharpdeveloper (Eric, 2026-11-09): Trending's Browse rails as the SEARCH
+   page's empty state (runSearch → .sds-browse). The overlay isn't a
+   .s-home-v3, so its light theme is mirrored off .sds-overlay--light. */
+.sds-browse { margin: 6px 0 0; }
+.sds-overlay--light .wb-hd, .sds-overlay--light .wb-album, .sds-overlay--light .wb-ev { color: #1a1208; }
+.sds-overlay--light .wb-artist, .sds-overlay--light .wb-sub { color: rgba(26,18,8,.55); }
+.sds-overlay--light .wb-art { background-color: #ddd6c8; box-shadow: 0 4px 14px rgba(30,20,10,.18); }
+.sds-overlay--light .wb-tile { background-color: transparent; }
+.sds-overlay--light .wb-ev { border-top-color: rgba(26,18,8,.1); }
+.sds-overlay--light .wb-ev-date { background: rgba(26,18,8,.06); }
+
+/* csharpdeveloper (Eric, 2026-11-09): "get rid of the tabs in the search at
+   the top" — All / Artists / Albums / Songs are gone; a search always shows
+   everything (ov._cat stays 'all'). The markup stays for the review flow's
+   layout, hidden. */
+.sds-tabs { display: none; }
+
+/* csharpdeveloper (Eric, 2026-11-09): THE + LIST — your Listened / Listen
+   later rail on top (.sds-lrail), then FRIENDS REVIEWED in two columns
+   (.sds-fgrid): cover, title, artist, the album's rating and the faces of the
+   friends who reviewed it. The faces open .sds-fsheet (each friend's rating;
+   a row opens their review). runSearch / sdsFriendSheet in app.js. */
+.sds-lrail {
+  display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory;
+  padding: 4px 16px 6px; scrollbar-width: none;
+}
+.sds-lrail::-webkit-scrollbar { display: none; }
+.sds-lcard {
+  flex: 0 0 112px; min-width: 0; scroll-snap-align: start;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0; border: none; background: none; text-align: left; cursor: pointer;
+  font-family: var(--font-main); color: #e8e2d6;
+}
+.sds-lcard-art {
+  width: 112px; aspect-ratio: 1; border-radius: 8px; margin-bottom: 5px;
+  background: rgba(255,255,255,0.06) center/cover no-repeat;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.sds-lcard-t { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sds-lcard-s { font-size: 11px; color: rgba(232,226,214,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sds-lcard-tag { font-size: 10.5px; font-weight: 700; color: #e8a65a; }
+
+.sds-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 12px; padding: 4px 16px 110px; }
+.sds-fcard { min-width: 0; display: flex; flex-direction: column; }
+.sds-fcard-art {
+  width: 100%; aspect-ratio: 1; border: none; padding: 0; border-radius: 10px; cursor: pointer;
+  background: rgba(255,255,255,0.06) center/cover no-repeat;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.45);
+}
+.sds-fcard-t { margin-top: 8px; font-size: 13.5px; font-weight: 600; color: #e8e2d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.sds-fcard-s { margin-top: 1px; font-size: 11.5px; color: rgba(232,226,214,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sds-fcard-r, .sds-fsheet-r { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #e8e2d6; }
+.sds-fcard-r { margin-top: 7px; }
+.sds-fcard-r b, .sds-fsheet-r b { font-weight: 700; }
+.sds-fsheet-r { flex-shrink: 0; }
+/* Five vinyl discs: an orange fill to --p over grey, a hole punched in the middle. */
+.sds-discs { display: inline-flex; gap: 0; padding-left: 1px; }
+/* Round 4 (Eric: "stack the friend cds"): the five discs overlap like a short
+   stack of records, each over the one to its right, ringed in the panel's colour. */
+.sds-discs .sds-disc { position: relative; margin-left: -5px; box-shadow: 0 0 0 1.5px #111116; }
+.sds-discs .sds-disc:first-child { margin-left: 0; }
+.sds-discs .sds-disc:nth-child(1) { z-index: 5; } .sds-discs .sds-disc:nth-child(2) { z-index: 4; }
+.sds-discs .sds-disc:nth-child(3) { z-index: 3; } .sds-discs .sds-disc:nth-child(4) { z-index: 2; }
+.sds-discs .sds-disc:nth-child(5) { z-index: 1; }
+.sds-fsheet .sds-discs .sds-disc { margin-left: -4px; box-shadow: 0 0 0 1.5px #1b1b21; }
+.sds-fsheet .sds-discs .sds-disc:first-child { margin-left: 0; }
+.sds-overlay--light .sds-discs .sds-disc { box-shadow: 0 0 0 1.5px #f0ece3; }
+.sds-overlay--light .sds-fsheet .sds-discs .sds-disc { box-shadow: 0 0 0 1.5px #f7f3eb; }
+.sds-disc {
+  width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0;
+  background:
+    radial-gradient(circle, #111116 0 18%, transparent 20% 46%, rgba(0,0,0,.28) 48% 52%, transparent 54%),
+    linear-gradient(90deg, #e8a65a var(--p), rgba(232,226,214,0.18) var(--p));
+}
+.sds-fsheet .sds-disc { width: 12px; height: 12px; }
+.sds-fsheet .sds-disc { background:
+    radial-gradient(circle, #1b1b21 0 18%, transparent 20% 46%, rgba(0,0,0,.28) 48% 52%, transparent 54%),
+    linear-gradient(90deg, #e8a65a var(--p), rgba(232,226,214,0.18) var(--p)); }
+.sds-fstack {
+  align-self: flex-start; margin-top: 8px;
+  display: inline-flex; align-items: center; padding: 2px 2px 2px 8px; border: none; background: none; cursor: pointer;
+}
+.sds-fface {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; margin-left: -8px;
+  background: #2a2a31 center/cover no-repeat;
+  box-shadow: 0 0 0 2px #111116;
+}
+.sds-fface--more { position: relative; z-index: 2; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #e8e2d6; background: #34343c; }
+.sds-fface--lg { width: 36px; height: 36px; margin-left: 0; box-shadow: none; }
+
+.sds-fsheet { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+.sds-fsheet-scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.5); opacity: 0; transition: opacity .2s ease; }
+.sds-fsheet-panel {
+  position: absolute; left: 0; right: 0; bottom: 0; max-height: 70%; overflow-y: auto;
+  padding: 8px 0 104px; border-radius: 18px 18px 0 0; background: #1b1b21;
+  transform: translateY(100%); transition: transform .3s cubic-bezier(.22,1,.36,1);
+}
+.sds-fsheet.open { pointer-events: auto; }
+.sds-fsheet.open .sds-fsheet-scrim { opacity: 1; }
+.sds-fsheet.open .sds-fsheet-panel { transform: translateY(0); }
+.sds-fsheet-nub { width: 38px; height: 4px; border-radius: 2px; margin: 0 auto 10px; background: rgba(232,226,214,0.25); cursor: pointer; }
+.sds-fsheet-hd { display: flex; align-items: center; gap: 12px; padding: 4px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+.sds-fsheet-art { width: 44px; height: 44px; border-radius: 7px; flex-shrink: 0; background: center/cover no-repeat; }
+.sds-fsheet-ttl { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sds-fsheet-ttl b { font-size: 15px; color: #e8e2d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sds-fsheet-ttl span { font-size: 11.5px; color: rgba(232,226,214,0.5); }
+.sds-fsheet-row {
+  width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+  border: none; background: none; text-align: left; cursor: pointer; font-family: var(--font-main);
+}
+.sds-fsheet-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sds-fsheet-main b { font-size: 13px; color: #e8e2d6; }
+.sds-fsheet-main span { font-size: 12px; color: rgba(232,226,214,0.6); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sds-fsheet-row svg { width: 15px; height: 15px; color: rgba(232,226,214,0.35); flex-shrink: 0; }
+
+.sds-overlay--light .sds-lcard, .sds-overlay--light .sds-fcard-t, .sds-overlay--light .sds-fcard-r,
+.sds-overlay--light .sds-fsheet-r, .sds-overlay--light .sds-fsheet-main b, .sds-overlay--light .sds-fsheet-ttl b { color: #1a1208; }
+.sds-overlay--light .sds-lcard-s, .sds-overlay--light .sds-fcard-s, .sds-overlay--light .sds-fsheet-ttl span { color: rgba(26,18,8,0.55); }
+.sds-overlay--light .sds-fsheet-main span { color: rgba(26,18,8,0.65); }
+.sds-overlay--light .sds-lcard-tag { color: #b5651d; }
+.sds-overlay--light .sds-fface { box-shadow: 0 0 0 2px #f0ece3; }
+.sds-overlay--light .sds-fface--more { background: #ddd6c8; color: #1a1208; }
+.sds-overlay--light .sds-fsheet-panel { background: #f7f3eb; }
+.sds-overlay--light .sds-fsheet-hd { border-bottom-color: rgba(26,18,8,0.08); }
+.sds-overlay--light .sds-disc { background:
+    radial-gradient(circle, #f0ece3 0 18%, transparent 20% 46%, rgba(0,0,0,.12) 48% 52%, transparent 54%),
+    linear-gradient(90deg, #b5651d var(--p), rgba(26,18,8,0.14) var(--p)); }
+.sds-overlay--light .sds-fsheet .sds-disc { background:
+    radial-gradient(circle, #f7f3eb 0 18%, transparent 20% 46%, rgba(0,0,0,.12) 48% 52%, transparent 54%),
+    linear-gradient(90deg, #b5651d var(--p), rgba(26,18,8,0.14) var(--p)); }
+
+/* ── The listens wheel (csharpdeveloper, 2026-11-09; sdsWheelInit, app.js) ──
+   CDs on a circle centred off the upper left; JS places each one. */
+.sds-sec--wheel .sds-sec-hd { position: relative; z-index: 2; }
+.sds-wheel {
+  position: relative; height: 300px; margin: 12px 0 6px; overflow: hidden;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.sds-wcd {
+  position: absolute; left: 0; top: 0; width: 82px; height: 82px; padding: 0; border: 0;
+  background: none; border-radius: 5px; cursor: pointer; will-change: transform;
+  -webkit-tap-highlight-color: transparent;
+}
+.sds-wcd[hidden] { display: none; }
+.sds-wcd-disc {
+  position: absolute; inset: 0; border-radius: 5px;   /* ×2.1 at focus ≈ the grid's 10px */
+  background: #222 center/cover no-repeat;
+  box-shadow: 0 6px 14px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.08);
+}
+.sds-wcd.is-focus .sds-wcd-disc { box-shadow: 0 4px 10px rgba(0,0,0,.55), inset 0 0 0 .5px rgba(255,255,255,.08); }
+/* the hub corner: toggle, album (big), artist (small), the big score */
+.sds-wheel-cap {
+  position: absolute; left: 16px; top: 2px; width: 38%; z-index: 0;
+  display: flex; flex-direction: column; align-items: flex-start;
+}
+.sds-wtog { display: inline-flex; white-space: nowrap; padding: 3px; border-radius: 999px; background: rgba(232,226,214,.08); margin-bottom: 12px; position: relative; z-index: 200; }
+.sds-wtog-b {
+  border: 0; background: none; color: rgba(232,226,214,.6); cursor: pointer; white-space: nowrap;
+  font: 600 11.5px/1 var(--font-main); padding: 6px 9px; border-radius: 999px;
+}
+.sds-wtog-b { display: inline-flex; align-items: flex-start; gap: 1px; padding: 6px 10px 6px 12px; }
+.sds-wtog-b svg { width: 19px; height: 19px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* the count as an exponent, top right of the icon (round 11) */
+.sds-wtog-b sup { font-size: 9.5px; font-weight: 700; line-height: 1; opacity: .7; margin-top: -2px; vertical-align: baseline; min-width: 7px; }
+.sds-wtog-b.on { background: #e8e2d6; color: #111116; }
+.sds-wcap-t { font-size: 19px; font-weight: 700; color: #e8e2d6; line-height: 1.15; pointer-events: none;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sds-wcap-s { margin-top: 3px; font-size: 12px; color: rgba(232,226,214,.55); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.sds-wcap-r { margin-top: 6px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.sds-wcap-r b { font-size: 34px; font-weight: 800; line-height: 1; letter-spacing: -.02em; color: #e8e2d6; }
+.sds-overlay--light .sds-wtog { background: rgba(26,18,8,.07); }
+.sds-overlay--light .sds-wtog-b { color: rgba(26,18,8,.6); }
+.sds-overlay--light .sds-wtog-b.on { background: #1a1208; color: #f0ece3; }
+.sds-overlay--light .sds-wcap-t, .sds-overlay--light .sds-wcap-r b { color: #1a1208; }
+.sds-overlay--light .sds-wcap-s { color: rgba(26,18,8,.55); }
+
+
+/* POSTS SINCE HOME (csharpdeveloper 11-09, sdPostBump in app.js): a superscript
+   on the Home icon in the accent colour, counting posts made since you were last
+   home. The number is a CSS counter fed from <html>'s --sd-posts. */
+html.sd-has-posts .v3-nav-item[title="Home"] { position: relative; }
+html.sd-has-posts .v3-nav-item[title="Home"]::after {
+  counter-reset: sdposts var(--sd-posts);
+  content: counter(sdposts);
+  position: absolute; left: 50%; top: 50%; margin: -17px 0 0 9px;
+  font: 800 11.5px/1 var(--font-main); font-variant-numeric: tabular-nums;
+  color: var(--v3-accent, var(--accent, #e6b866));
+  text-shadow: 0 0 2px rgba(0,0,0,.6), 0 1px 4px rgba(0,0,0,.55);   /* legible on an accent-tinted page too */
+  pointer-events: none;
+}
+/* (Eric 11-09: "a little flash … or a small little wiggle") — pops in, flashes
+   white with a glow, wiggles, settles back to the accent. */
+.v3-nav-item.sd-post-pop::after { animation: sdPostPop .9s cubic-bezier(.3,1.4,.5,1); transform-origin: 30% 80%; }
+@keyframes sdPostPop {
+  0%   { transform: scale(.3); opacity: 0; }
+  18%  { transform: scale(1.55); opacity: 1; color: #fff; text-shadow: 0 0 6px #fff, 0 0 12px var(--v3-accent, #e6b866); }
+  34%  { transform: scale(1.1) rotate(-16deg); }
+  50%  { transform: scale(1.1) rotate(13deg); }
+  64%  { transform: rotate(-8deg); }
+  78%  { transform: rotate(4deg); }
+  100% { transform: none; opacity: 1; }
+}
+html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }

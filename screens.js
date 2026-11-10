@@ -2697,22 +2697,12 @@ function wallHtml(light) {
                  chips and spacing. Active state and the genre list are painted
                  by paintWallTabs, never interpolated (evaluated once at load).
                  No backticks in here: template literal. -->
-            <div class="wall2-bar v3-feed-tabs wall2-tabs">
-              <!-- 2026-11-04 (Eric): the Friends / Popular / New tabs are gone. The
-                   page is now the BROWSE list (wall2-browse, below), and the row
-                   holds the ALTERNATIVE views: Swipe (doomscroll.js) and the old
-                   Carousel, both beta, then two greyed slots not built yet.
-                   Carousel toggles WALL_VIEW (pickWallView, app.js); the deck
-                   deals WALL_TAB = friends as it did by default. -->
-              <button class="wall2-cat ds-swipe" aria-label="Swipe mode (beta)" onclick="event.stopPropagation(); sdDoomOpen(this)">Swipe<span class="ds-beta">beta</span></button>
-              <button class="wall2-cat ds-swipe wall2-view" data-view="carousel" aria-label="Carousel (beta)" onclick="event.stopPropagation(); pickWallView(this)">Carousel<span class="ds-beta">beta</span></button>
-              <button class="wall2-cat ds-swipe qs-entry" aria-label="Comments mode (beta)" onclick="event.stopPropagation(); sdQuoteOpen(this)">Comments<span class="ds-beta">beta</span></button>
-              <button class="wall2-cat ds-swipe cp-entry" aria-label="CD player (beta)" onclick="event.stopPropagation(); sdCpLaunch(this)">Player<span class="ds-beta">beta</span></button>
-            </div>
-            <!-- 2026-11-04 (Eric): BROWSE, like Apple Music's New page: a heading
-                 per category and a sideways rail of covers, about 2.5 showing,
-                 fading out to the right. Filled by wallPaintBrowse (app.js). -->
-            <div class="wall2-browse"></div>
+            <!-- csharpdeveloper (Eric, 2026-11-09): "take out the trending options at
+                 the top and just put swipe mode as the trending option". The
+                 Swipe / Carousel / Comments / Player row and the Browse rails are
+                 gone from here: Browse is the search page's empty state now
+                 (runSearch), and opening this screen opens Swipe over it
+                 (doomscroll.js, TRENDING IS SWIPE). No backticks: template literal. -->
             ${friendsBentoHtml()}
             <!-- 0.20 (Eric, 2026-10-22): "take out the grid" on Trending. The
                  Albums / Artists / Genres / Week bar and the album grid are gone;
@@ -4016,7 +4006,7 @@ function bottomNav(active = 'home') {
                    brings up the album) and the pick opens the log sheet. No
                    backticks in here: template literal. -->
               <button class="v3-nav-item v3-nav-item--add" onclick="openReviewSearch(this, event)" title="Write a review" aria-label="Write a review"><span class="v3-nav-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
-              <button class="v3-nav-item${on('wall')}" onclick="sdNavTab('wall')" title="Trending"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="2.5" y="2.5" width="5" height="5" rx="1.2"/><rect x="9.5" y="2.5" width="5" height="5" rx="1.2"/><rect x="16.5" y="2.5" width="5" height="5" rx="1.2"/><rect x="2.5" y="9.5" width="5" height="5" rx="1.2"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.2"/><rect x="16.5" y="9.5" width="5" height="5" rx="1.2"/><rect x="2.5" y="16.5" width="5" height="5" rx="1.2"/><rect x="9.5" y="16.5" width="5" height="5" rx="1.2"/><rect x="16.5" y="16.5" width="5" height="5" rx="1.2"/></svg></button>
+              <button class="v3-nav-item${on('wall')}" onclick="sdNavTab('wall')" title="Trending"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><!-- csharpdeveloper (Eric, 2026-11-09): a double music note in place of the grid --><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
               <button class="v3-nav-item${on('profile')}" onclick="sdNavTab('profile')" title="Profile"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
             </div>
             <!-- The CD console. WARNING: it lives INSIDE the nav, not beside it.
