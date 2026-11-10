@@ -715,6 +715,7 @@ window.sdOpenFromHeader = function (id) {
    e.g. a stale album page under Settings › Edit profile. */
 window.sdNavTab = function (id) {
   if (id === 'home') sdPostReset();
+  window.SD_TAB = id;   // the tab the bubble stays on through album / artist pages (sdNavBubble)
   backStack.length = 0;
   if (typeof closeSearch === 'function') closeSearch();
   navigate(id);
@@ -8383,6 +8384,7 @@ window.goToMobileScreen = function(idx) {
 // ── navigate() — called from screen HTML onclick ─────────────
 window.navigate = function(targetId, direction) {
   if (targetId === 'home') sdPostReset();   // posts-since-home badge (sdPostBump)
+  if (targetId === 'wall' || targetId === 'profile') window.SD_TAB = targetId;
   /* Leaving the screen leaves the dial. `renderViewer` rebuilds the shells, so
      the markup carrying `--mixing` is thrown away either way — this is what
      stops `mixHost` from being left pointing at a detached node, which would
@@ -8589,6 +8591,15 @@ function commitLog() {
    every nav that any screen renders shows it with no repainting; app.css draws
    it as a superscript on the Home icon in the accent colour. Going home — the
    Home tab or any navigate('home') — clears it. */
+/* PREVIEWS STOP WHEN YOU LEAVE (csharpdeveloper, Eric 11-09: "previews stop
+   playing if u leave this page for now"). Swipe, Comments and Player each push
+   a stop into window.sdPreviewStops; leaving by the nav already closes them,
+   and this covers the rest: the + list or Search opening over the page, and
+   the app going to the background. Nothing auto-resumes; a tap on the CD does. */
+function sdStopPreviews() { (window.sdPreviewStops || []).forEach(f => { try { f(); } catch (e) {} }); }
+document.addEventListener('visibilitychange', () => { if (document.hidden) sdStopPreviews(); });
+window.addEventListener('pagehide', sdStopPreviews);
+
 function sdPostBump() {
   window._sdPosts = (window._sdPosts || 0) + 1;
   const h = document.documentElement;
@@ -10450,6 +10461,7 @@ function ensureSearchOverlay() {
    album?", albums only, no tabs, and a pick opens the log sheet instead of
    the album page (runSearch / sdsOpenResult read `ov._mode`). */
 window.openSearch = function (triggerEl, mode, restoring) {
+  sdStopPreviews();   // csharpdeveloper 11-09: the + / Search covering Trending stops its preview
   const host = (triggerEl && triggerEl.closest && triggerEl.closest('.app-screen'))
              || document.querySelector('.app-screen') || document.body;
   mode = mode === 'review' ? 'review' : 'browse';
@@ -15413,7 +15425,13 @@ function sdNavBubble(nav) {
   const host = nav.closest('.app-screen');
   const ov = document.getElementById('sd-search');
   const searching = host && host.classList.contains('is-searching') && ov && ov._mode !== 'review';
-  const item = searching ? row.querySelector('.v3-nav-item[title="Search"]') : row.querySelector('.v3-nav-item.active');
+  /* csharpdeveloper (Eric 11-09): album and artist pages are built inside the
+     Home screen, so their nav marks Home. Opened from Trending or Profile, the
+     bubble stays on the tab you came from (SD_TAB, set by the tab taps). */
+  const TAB_TITLE = { wall: 'Trending', profile: 'Profile' };
+  const sub = host && (host.classList.contains('s-home-v3--album') || host.classList.contains('s-home-v3--artist'));
+  const from = sub && TAB_TITLE[window.SD_TAB] ? row.querySelector(`.v3-nav-item[title="${TAB_TITLE[window.SD_TAB]}"]`) : null;
+  const item = searching ? row.querySelector('.v3-nav-item[title="Search"]') : (from || row.querySelector('.v3-nav-item.active'));
   if (!item) { bub.classList.remove('is-on'); return; }
   const x = item.offsetLeft + (item.offsetWidth - bub.offsetWidth) / 2;
   const frac = x / row.offsetWidth;
@@ -15433,7 +15451,7 @@ function sdNavBubble(nav) {
       return;
     }
   }
-  if (bub._x !== x) { bub._x = x; bub.style.transform = `translateX(${x}px)`; }
+  if (bub._x !== x || bub.style.transform !== `translateX(${x}px)`) { bub._x = x; bub.style.transform = `translateX(${x}px)`; }   // the style, not just _x: a pending mount slide can land after
   bub.classList.add('is-on');
   SD_NAV_X = frac;
 }
@@ -15446,8 +15464,12 @@ function sdNavBubbleSync() {
 }
 window.sdNavBubbleSync = sdNavBubbleSync;
 new MutationObserver(muts => {
-  for (const m of muts) if (m.addedNodes.length) { sdNavBubbleSync(); return; }
-}).observe(document.documentElement, { childList: true, subtree: true });
+  for (const m of muts) {
+    if (m.addedNodes.length) { sdNavBubbleSync(); return; }
+    // a screen turning into (or out of) an album / artist page — sdNavBubble's SD_TAB rule
+    if (m.type === 'attributes' && m.target.classList && m.target.classList.contains('app-screen')) { sdNavBubbleSync(); return; }
+  }
+}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] });
 window.addEventListener('resize', () => {
   document.querySelectorAll('.v3-nav-bubble').forEach(b => { b._x = null; });
   sdNavBubbleSync();

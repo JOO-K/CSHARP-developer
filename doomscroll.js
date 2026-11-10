@@ -423,6 +423,8 @@
     cmt: '<svg viewBox="0 0 24 24"><path d="M6.5 5.5h11A1.5 1.5 0 0 1 19 7v8.5a1.5 1.5 0 0 1-1.5 1.5h-5l-4 3.2V17H6.5A1.5 1.5 0 0 1 5 15.5V7a1.5 1.5 0 0 1 1.5-1.5z"/></svg>',
     plus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
     close: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    quote: '<svg viewBox="0 0 24 24"><path d="M5.5 4.5h13A1.5 1.5 0 0 1 20 6v9a1.5 1.5 0 0 1-1.5 1.5H13l-4.5 3.5v-3.5h-3A1.5 1.5 0 0 1 4 15V6a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/></svg>',
+    disc: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 5.8a6.2 6.2 0 0 1 6.2 6.2"/></svg>',
     genre: '<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
     // the app's own Listened / Listen later glyphs (SD_LINE_ICONS ear / clock, screens.js)
     ear: '<svg viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>',
@@ -434,7 +436,13 @@
   function shellHtml() {
     return `
       <div class="ds-top">
-        <button class="ds-ibtn ds-close" aria-label="Close scroll mode" onclick="event.stopPropagation(); sdDoomExit()">${ICO.close}</button>
+        <!-- csharpdeveloper (Eric 11-09): "get rid of the x and put the other
+             experiences there" - Comments and Player (beta) sit where the X was;
+             the nav is the way out now. No backticks: template literal. -->
+        <div class="ds-topl">
+          <button class="ds-modebtn" aria-label="Comments mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('qs')">${ICO.quote}<span>Comments</span></button>
+          <button class="ds-modebtn" aria-label="Player mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('cp')">${ICO.disc}<span>Player</span></button>
+        </div>
         <span class="ds-credit">Previews by Deezer</span>
         <div class="ds-topr">
         <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}</button>
@@ -464,15 +472,6 @@
           <div class="ds-gnub"></div>
           <div class="ds-ghd"><b>Genres</b><button class="ds-gclear" onclick="sdDoomGenreClear()">Show everything</button></div>
           <div class="ds-glist"></div>
-          <!-- csharpdeveloper (Eric, 2026-11-09): "can we have comment mode and
-               player mode the beta features accessible inside the trending
-               genres tab". The Trending tab row is gone (Trending = Swipe), so
-               the other two views live here. No backticks: template literal. -->
-          <div class="ds-gmodes">
-            <span class="ds-gmodes-hd">Other modes</span>
-            <button class="ds-gb ds-gmode" onclick="event.stopPropagation(); sdDoomBeta('qs')">Comments<span class="ds-gmode-b">beta</span></button>
-            <button class="ds-gb ds-gmode" onclick="event.stopPropagation(); sdDoomBeta('cp')">Player<span class="ds-gmode-b">beta</span></button>
-          </div>
           <button class="ds-ggo" onclick="sdDoomGenreCommit()" hidden>Pick genres</button>
         </div>
       </div>`;
@@ -1478,6 +1477,7 @@
     if (kind === 'qs' && typeof window.sdQuoteOpen === 'function') window.sdQuoteOpen(scr);
     else if (kind === 'cp' && typeof window.sdCpLaunch === 'function') window.sdCpLaunch(scr);
   };
+  (window.sdPreviewStops = window.sdPreviewStops || []).push(() => { if (DS.audio && !DS.audio.paused) DS.audio.pause(); });
   window.sdBetaBack = function () { setTimeout(() => trendingOpen(), 0); };
   window.sdDoomExit = function () {
     const onWall = !!(DS.root && DS.root.closest('.s-wall2'));

@@ -894,6 +894,7 @@
   }
   const _navTab = window.sdNavTab;
   if (typeof _navTab === 'function') window.sdNavTab = function () { P.resume = null; return _navTab.apply(this, arguments); };
+  (window.sdPreviewStops = window.sdPreviewStops || []).push(() => { if (P.audio && !P.audio.paused) P.audio.pause(); });
   const _navigate = window.navigate;
   if (typeof _navigate === 'function') {
     window.navigate = function () { if (P.root) window.sdCpClose(); return _navigate.apply(this, arguments); };

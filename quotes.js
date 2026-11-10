@@ -966,6 +966,7 @@
   if (typeof _navTab === 'function') {
     window.sdNavTab = function () { Q.resume = null; return _navTab.apply(this, arguments); };
   }
+  (window.sdPreviewStops = window.sdPreviewStops || []).push(() => { if (Q.audio && !Q.audio.paused) Q.audio.pause(); });
   // Anything that navigates away takes the feed down first, or the preview keeps playing.
   const _navigate = window.navigate;
   if (typeof _navigate === 'function') {
