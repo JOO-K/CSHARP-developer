@@ -660,6 +660,9 @@ function homeShellHtml(light, coversUp, cls) {
 
             <div class="v3-rev-list"></div>
 
+            <!-- More by <artist> / More like this: Browse-style rails (populateAlbumMore) -->
+            <div class="v3-alb-more" hidden></div>
+
           </div><!-- /v3-review-panel -->
           <!-- THE REVIEW PANEL: the review page as a STATE of this shell (--rvp),
                filled by rvpOpenInPlace so opening a review never re-renders
@@ -3186,8 +3189,9 @@ window.reviewPanelHtml = function (R) {
   const call = (fn, ...args) => (typeof window[fn] === 'function' ? window[fn](...args) : '');
   return `
           <div class="rvp-scroll">
-            <button class="plp-back-pill" onclick="rvpBack()" title="Back">
-              <span class="v3-ring plp-ring"><span class="v3-ring-spin">${dots}</span></span>
+            <!-- A plain back ARROW, upper left (Eric, 2026-11-13); it was the ring pill. -->
+            <button class="rvp-back" onclick="rvpBack()" title="Back" aria-label="Back">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
             </button>
 
             <!-- THE SHEET'S LOOK (Eric, 2026-09-25): the page is the review sheet's
@@ -3196,7 +3200,7 @@ window.reviewPanelHtml = function (R) {
                  the comments — in a .v3-rsh-body--page that scrolls with the
                  page instead of inside a sheet. One builder (rshBodyHtml,
                  app.js), so the page cannot drift from the popup. -->
-            <div class="v3-rsh-body v3-rsh-body--page">${typeof rshBodyHtml === 'function' ? rshBodyHtml(R) : ''}
+            <div class="v3-rsh-body v3-rsh-body--page">${typeof rshBodyHtml === 'function' ? rshBodyHtml(R, true) : ''}
             </div>
           </div>`;
 };

@@ -2217,6 +2217,11 @@ window.submitReview = function (btn) {
       split: true, record: { image: alb.image, album: alb.album, artist: alb.artist, year: alb.year },
     });
     list.insertBefore(card, list.firstChild);
+    // Still ALB_REVS_SHOWN above "Show all reviews" (populateReviewList).
+    if (list.querySelector(':scope > .v3-rev-all')) {
+      const cs = list.querySelectorAll(':scope > .v3-rev-card');
+      if (cs.length > ALB_REVS_SHOWN) cs[cs.length - 1].remove();
+    }
   }
   btn.textContent = 'Posted ✓';
   btn.disabled = true;
@@ -2355,7 +2360,131 @@ function populateReviewPanel(scr) {
   populateSongList(scr);
   const active = scr.querySelector('.v3-rev-filter.active');
   populateReviewList(scr, active ? active.dataset.f : 'popular');
+  scr.querySelectorAll('.v3-allrev').forEach(el => el.remove());   // a new album: that page belonged to the last one
+  populateAlbumMore(scr, a);
 }
+
+/* ALL REVIEWS (csharpdeveloper, Eric 2026-11-13): "a full page of stacked
+   reviews and if u press one it opens the full text with that open review page
+   popup". A page over the album page (inside the shell, so the album's colours
+   and card rules carry), every review in the chosen filter's order; a card's
+   tap is still cmtCardTap -> openReviewSheet, which mounts above this page. */
+window.openAllReviews = function (btn) {
+  const scr = btn && btn.closest('.s-home-v3');
+  const a = scr && (scr._album || window.featuredAlbum);
+  if (!a) return;
+  sdHaptic(6);
+  scr.querySelectorAll('.v3-allrev').forEach(el => el.remove());
+  const active = scr.querySelector('.v3-rev-filter.active');
+  const f = active ? active.dataset.f : 'popular';
+  const FILTERS = [['popular', 'Popular'], ['friends', 'Friends'], ['new', 'New'], ['controversial', 'Controversial']];
+  const pg = document.createElement('div');
+  pg.className = 'v3-allrev';
+  pg.innerHTML = `
+    <div class="v3-allrev-hd">
+      <button type="button" class="v3-allrev-back" aria-label="Back" onclick="event.stopPropagation(); closeAllReviews(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <div class="v3-allrev-ttl"><b>Reviews</b><span>${_sdsEsc(a.album)} · ${_sdsEsc(a.artist)}</span></div>
+    </div>
+    <div class="v3-allrev-body">
+      <div class="v3-rev-filters v3-allrev-filters">${FILTERS.map(([k, l]) => `<button class="v3-rev-filter${k === f ? ' active' : ''}" data-f="${k}">${l}</button>`).join('')}</div>
+      <div class="v3-rev-list v3-allrev-list"></div>
+    </div>`;
+  scr.appendChild(pg);
+  const listEl = pg.querySelector('.v3-allrev-list');
+  populateReviewList(scr, f, { into: listEl });
+  pg.querySelector('.v3-allrev-filters').addEventListener('click', e => {
+    const b = e.target.closest('.v3-rev-filter');
+    e.stopPropagation();
+    if (!b || b.classList.contains('active')) return;
+    sdHaptic(6);
+    pg.querySelectorAll('.v3-allrev-filters .v3-rev-filter').forEach(x => x.classList.toggle('active', x === b));
+    populateReviewList(scr, b.dataset.f, { into: listEl });
+    pg.querySelector('.v3-allrev-body').scrollTop = 0;
+  });
+  requestAnimationFrame(() => pg.classList.add('open'));
+  setTimeout(() => pg.classList.add('open'), 60);   // rAF stalls in a background tab
+};
+window.closeAllReviews = function (el) {
+  const pg = el && el.closest('.v3-allrev');
+  if (!pg) return;
+  sdHaptic(6);
+  pg.classList.remove('open');
+  setTimeout(() => pg.remove(), 300);
+};
+
+/* MORE BY / MORE LIKE THIS (csharpdeveloper, Eric 2026-11-13): under the
+   reviews, two sideways rails in Search's Browse look (.wb-sec / .wb-rail /
+   .wb-card): the artist's other records, then the same genre by other artists
+   (seeded per album, so the row is stable). A rail with nothing hides. */
+function populateAlbumMore(scr, a) {
+  const box = scr.querySelector('.v3-alb-more');
+  if (!box) return;
+  const A = (window.ARCHIVE || []).filter(x => x && x.image && x.album);
+  const seen = new Set([a.album + '|' + a.artist]);
+  const uniq = x => { const k = x.album + '|' + x.artist; if (seen.has(k)) return false; seen.add(k); return true; };
+  /* The archive rarely holds more than one record per artist, so the artist's
+     Deezer discography (albMoreFetch, cached per artist) joins it. */
+  if (!ALB_MORE_DZ) ALB_MORE_DZ = new Map();
+  const dzBy = (ALB_MORE_DZ.get(String(a.artist).toLowerCase()) || []);
+  const by = A.filter(x => x.artist === a.artist).concat(dzBy).filter(uniq)
+    .sort((x, y) => (y.year || 0) - (x.year || 0)).slice(0, 15);
+  box._recs = by.slice();
+  const g = String(a.genre || '').split('/')[0].trim().toLowerCase();
+  const rnd = seedRand('albmore::' + a.album + '::' + a.artist);
+  const pool = A.filter(x => x.artist !== a.artist);
+  const artists = new Set();
+  const oneEach = x => { if (artists.has(x.artist)) return false; artists.add(x.artist); return true; };
+  let like = g ? pool.filter(x => String(x.genre || '').split('/')[0].trim().toLowerCase() === g) : [];
+  like = like.sort(() => rnd() - 0.5).filter(oneEach).filter(uniq).slice(0, 12);
+  if (like.length < 6) like = like.concat(pool.slice().sort((x, y) => (+y.rating || 0) - (+x.rating || 0))
+    .filter(oneEach).filter(uniq).slice(0, 12 - like.length));
+  box._recs = box._recs.concat(like);
+  const card = x => `
+      <div class="wb-card" data-k="${box._recs.indexOf(x)}" onclick="event.stopPropagation(); albMoreOpen(this)">
+        <div class="wb-art" style="background-image:url('${x.image}')"></div>
+        <div class="wb-album">${_sdsEsc(x.album)}</div>
+        <div class="wb-artist">${_sdsEsc(x.year ? x.year + ' · ' + x.artist : x.artist)}</div>
+      </div>`;
+  const sec = (title, items) => items.length ? `
+    <section class="wb-sec">
+      <div class="wb-hd">${_sdsEsc(title)}</div>
+      <div class="wb-rail" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">${items.map(card).join('')}</div>
+    </section>` : '';
+  box.innerHTML = sec('More by ' + a.artist, by) + sec('More like this', like);
+  box.hidden = !box.innerHTML.trim();
+  if (!ALB_MORE_DZ.has(String(a.artist).toLowerCase())) albMoreFetch(a).then(got => {
+    if (got && (scr._album || window.featuredAlbum) === a) populateAlbumMore(scr, a);
+  });
+}
+/* An artist's albums off Deezer → app records (dzRecord, `_lite`, hydrated on
+   open by the openAlbumPage wrapper). Keyed by artist name; [] on a miss, so
+   it is asked once. */
+var ALB_MORE_DZ = ALB_MORE_DZ || new Map();   // var + guard: a render may reach populateAlbumMore before this line runs
+function albMoreFetch(a) {
+  const key = String(a.artist || '').toLowerCase();
+  if (!key) return Promise.resolve(false);
+  ALB_MORE_DZ.set(key, []);
+  const idP = a.artistId ? Promise.resolve({ id: a.artistId, name: a.artist })
+    : dz('search/artist?q=' + encodeURIComponent(a.artist) + '&limit=5').then(r => {
+        const hit = ((r && r.data) || []).find(x => String(x.name).toLowerCase() === key);
+        return hit ? { id: hit.id, name: hit.name } : null;
+      });
+  return idP.then(ar => ar ? dz('artist/' + ar.id + '/albums?limit=50').then(r => {
+    const seen = new Set();
+    const recs = ((r && r.data) || []).filter(dzGoodAlbum)
+      .filter(al => { const t = String(al.title).toLowerCase(); if (seen.has(t)) return false; seen.add(t); return true; })
+      .map(al => dzRecord(al, { name: a.artist, id: ar.id }));
+    ALB_MORE_DZ.set(key, recs);
+    return recs.length > 0;
+  }) : false).catch(() => false);
+}
+window.albMoreOpen = function (el) {
+  const box = el.closest('.v3-alb-more');
+  const a = box && box._recs && box._recs[+el.dataset.k];
+  if (!a) return;
+  sdHaptic(6);
+  openAlbumPage(a);
+};
 
 // ── Tracklist under the review CTA ────────────────────────────
 // Titles/durations/ratings are deterministic placeholders (seeded per album)
@@ -3116,10 +3245,31 @@ window.rvpBack = function () {
     return;
   }
   const body = document.querySelector('.s-rvp .v3-body');
-  sdFadeOut(body, () => {
+  rvpSlideOut(body, () => {
     document.body.classList.add('sd-return');
     goBack('home');
     setTimeout(() => document.body.classList.remove('sd-return'), 600);
+    // Back to the same spot you opened the review from (rvpOpenFrom).
+    const from = window._rvpFrom; window._rvpFrom = null;
+    if (!from) return;
+    const vis = () => [...document.querySelectorAll('.app-screen')].find(e => e.offsetParent);
+    if (from.allrev) setTimeout(() => {
+      const scr = vis(); const anchor = scr && scr.querySelector('.v3-rev-list');
+      if (!anchor || scr.querySelector('.v3-allrev')) return;
+      openAllReviews(anchor);
+      const pg = scr.querySelector('.v3-allrev');
+      if (!pg) return;
+      pg.style.transition = 'none'; pg.classList.add('open');
+      const b = pg.querySelector(`.v3-allrev-filters .v3-rev-filter[data-f="${from.allrev}"]`);
+      if (b && !b.classList.contains('active')) b.click();
+      const pb = pg.querySelector('.v3-allrev-body');
+      [0, 80, 250].forEach(t => setTimeout(() => { if (pb) pb.scrollTop = from.allY; }, t));
+      setTimeout(() => { pg.style.transition = ''; }, 60);
+    }, 120);
+    if (from.y != null) [0, 60, 200, 450].forEach(t => setTimeout(() => {
+      const scr = vis(); const b = scr && scr.querySelector('.v3-body');
+      if (b) b.scrollTop = from.y;
+    }, t));
   });
 };
 // The record line: in place it is the album you are on, so it is Back; on
@@ -3139,6 +3289,63 @@ function sdFadeOut(el, then) {
   const go = () => { if (!done) { done = true; then(); } };
   el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 200, easing: 'ease-out', fill: 'forwards' }).onfinish = go;
   setTimeout(go, 320);                       // an animation paused in a background tab still has to navigate
+}
+/* THE REVIEW PAGE'S RECORD SIDE (csharpdeveloper, Eric 2026-11-13): in the
+   CD's place, Like · Listened · Listen later then a + (the log sheet), and the
+   streaming services under them. The three are the album's own saved toggles
+   (writeDraftFlag — the same draft the album page and the log sheet read). */
+function rvpRecSideHtml(a) {
+  const d = (typeof albumDraft === 'function' && albumDraft(a)) || {};
+  const I = typeof SD_ICONS !== 'undefined' ? SD_ICONS : {};
+  const flag = (k, ico, lbl) => `<button type="button" class="rvp-q${d[k] ? ' on' : ''}" data-k="${k}" title="${lbl}" aria-label="${lbl}" onclick="rvpFlag(this, event)">${ico || ''}</button>`;
+  const ORDER = ['deezer', 'apple', 'spotify', 'ytmusic'];
+  const svcs = (typeof SD_SERVICES !== 'undefined' ? SD_SERVICES : []).slice()
+    .sort((x, y) => ORDER.indexOf(x.id) - ORDER.indexOf(y.id))
+    .map(sv => `<button type="button" class="rvp-svc" aria-label="Open in ${sdAttr(sv.name)}" onclick="rvpSvc(this, event, '${sv.id}')">${typeof svcMarkHtml === 'function' ? svcMarkHtml(sv, 'rvp-svc-ico') : ''}</button>`).join('');
+  return `
+          <div class="rvp-rec-side">
+            <div class="rvp-rec-acts">
+              ${flag('fav', I.heart, 'Like')}${flag('listened', I.ear, 'Listened')}${flag('later', I.clock, 'Listen later')}
+              <button type="button" class="rvp-q rvp-q--add" title="Review it" aria-label="Review it" onclick="rvpReviewIt(this, event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+            </div>
+            <div class="rvp-rec-svcs">${svcs}</div>
+          </div>`;
+}
+function rvpAlbumOf(el) {
+  const host = el && el.closest('.v3-rsh-body');
+  const rev = host && host.querySelector('.v3-fbr--sheet');
+  const R = rev && REV_INDEX[rev.dataset.k];
+  return (R && R.album) || null;
+}
+window.rvpFlag = function (btn, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const a = rvpAlbumOf(btn); const k = btn.dataset.k;
+  if (!a || !k) return;
+  const on = btn.classList.toggle('on');
+  sdHaptic(6);
+  writeDraftFlag({ title: a.album, subtitle: a.artist, image: a.image }, k, on);
+  homeShells().forEach(s => { if (shellAlbum(s) === a) syncQuickLog(s, a); });
+};
+window.rvpReviewIt = function (btn, e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const a = rvpAlbumOf(btn);
+  if (!a) return;
+  openLogSheet(btn, { image: a.image, title: a.album, subtitle: a.artist, year: a.year || '', ref: a });
+};
+window.rvpSvc = function (btn, e, id) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const a = rvpAlbumOf(btn);
+  if (a && typeof serviceGo === 'function') serviceGo(btn, id, a, null);
+};
+
+/* The review page leaves the way it came: out to the right (11-13). */
+function rvpSlideOut(el, then) {
+  if (!el || !el.animate || sdReducedMotion()) { then(); return; }
+  let done = false;
+  const go = () => { if (!done) { done = true; then(); } };
+  el.animate([{ transform: 'translateX(0)', opacity: 1 }, { transform: 'translateX(100%)', opacity: 1 }],
+             { duration: 260, easing: 'cubic-bezier(.4,0,.6,1)', fill: 'forwards' }).onfinish = go;
+  setTimeout(go, 380);                       // a paused animation in a background tab still has to navigate
 }
 window.openReviewPage = function (key, compose, card) {
   const R = REV_INDEX[key];
@@ -3187,7 +3394,7 @@ window.cmtCardTap = function (card) {
   if (card.classList.contains('v3-rev-card--hero')) return;   // already the page
   if (card.dataset.feed) return feedOpenReview(+card.dataset.feed, false, card);
   const k = card.dataset.k;
-  if (k) openReviewSheet(k, false, card);
+  if (k) rvpOpenFrom(k, false, card);
 };
 
 /* THE PENCIL'S TAP (0.13): straight from your posted card into the sheet, with
@@ -3226,7 +3433,7 @@ window.cmtCompose = function (btn) {
      stays unfocused. `page` matches `.v3-rsh` too, so pressing it INSIDE the
      sheet falls through below and focuses the box, as it always did. */
   if (feedCard) return feedOpenReview(+feedCard.dataset.feed, false, btn);
-  if (!page) { if (REV_INDEX[k]) openReviewSheet(k, false, btn); return; }   // the sheet, box unfocused
+  if (!page) { if (REV_INDEX[k]) rvpOpenFrom(k, false, btn); return; }   // the review page (11-13), box unfocused
   if (!CMT_OPEN[k]) { CMT_OPEN[k] = true; cmtRender(k); }
   const input = page.querySelector('.v3-cmt-input');
   if (input) input.focus();
@@ -3285,6 +3492,9 @@ window.cmtReplyCancel = function (btn) {
 window.cmtGrow = function (ta) {
   ta.style.height = 'auto';
   if (ta.value) ta.style.height = ta.scrollHeight + 'px';
+  // Post slides out from the right once there is something to post (11-13).
+  const row = ta.closest('.v3-cmt-add-row');
+  if (row) row.classList.toggle('has-text', !!ta.value.trim());
 };
 window.cmtAdd = function (form) {
   const k = form.dataset.k;
@@ -3531,7 +3741,13 @@ function revCardHtml(o) {
     </div>`;
 }
 
-function populateReviewList(scr, filter) {
+/* csharpdeveloper (Eric, 2026-11-13): "on album pages lets only show 5 reviews
+   and then have a show all reviews underneath them that takes you to a full
+   page of stacked reviews". The album page's list stops at ALB_REVS_SHOWN with
+   a "Show all reviews" button (openAllReviews); `opts.into` renders the WHOLE
+   list into that page instead. Trending's list (.wall2-revs) caps itself. */
+var ALB_REVS_SHOWN = 5;   // var: populateReviewList may run before this line
+function populateReviewList(scr, filter, opts) {
   const a = scr._album || window.featuredAlbum;
   const list = scr && scr.querySelector('.v3-rev-list');
   if (!a || !list) return;
@@ -3586,7 +3802,9 @@ function populateReviewList(scr, filter) {
      every card here wears `.v3-rev-card--page` with `timeRight` + `actsTop`,
      the feed's flags. No record line: the album is the page. */
   const order = revsFor(a);                // ⚠️ the padded list — see revsFor
-  list.innerHTML = mineHtml + pinHtml + revs.map((r) => {
+  const into = opts && opts.into;
+  const target = into || list;
+  const cards = [mineHtml, pinHtml].filter(Boolean).concat(revs.map((r) => {
     const i = Math.max(0, order.indexOf(r));
     const m = revMeta(r, i);
     const key = a.album + '::' + (r.name || '') + '::' + i;
@@ -3601,16 +3819,21 @@ function populateReviewList(scr, filter) {
       // caches) the thread, the same one the review page shows.
       previewTotal: m.comments ? cmtCount(key, m.comments) : 0,
     });
-  }).join('') || `<div class="v3-rev-empty">No reviews yet — be the first.</div>`;
+  }));
+  const LIM = ALB_REVS_SHOWN || 5;
+  const capped = !into && !list.classList.contains('wall2-revs') && cards.length > LIM;
+  target.innerHTML = (capped ? cards.slice(0, LIM).join('')
+      + `<button class="v3-songs-more v3-rev-all" onclick="event.stopPropagation(); openAllReviews(this)">Show all reviews</button>`
+    : cards.join('')) || `<div class="v3-rev-empty">No reviews yet — be the first.</div>`;
   /* A long review FADES at the clamp instead of ending in an ellipsis — but only
      one that really overflows: a mask on every card would dim the last line of
      a short review too. ⚠️ Measured now AND again after layout: when the panel
      is still display:none (the --review class lands after this runs on some
      routes) every card measures 0×0 and nothing is marked — which is how the
      fade shipped invisible the first time. */
-  markLongReviews(list);
-  setTimeout(() => markLongReviews(list), 80);
-  setTimeout(() => markLongReviews(list), 600);
+  markLongReviews(target);
+  setTimeout(() => markLongReviews(target), 80);
+  setTimeout(() => markLongReviews(target), 600);
 }
 function markLongReviews(list) {
   if (!list || !list.isConnected) return;
@@ -3839,7 +4062,38 @@ window.feedOpenReview = function (n, compose, trigger) {
      feed and drops back down, so the feed is still where you left it. The
      `asPage` argument the comment button used to pass (0.12) went on
      2026-10-09 with the page route — there is one way to open a review now. */
-  openReviewSheet(key, !!compose, trigger || null);
+  /* csharpdeveloper (Eric, 2026-11-13): "when u press these review cards
+     instead of a popup it opens a new page that u can press back arrow on to
+     go back in the upper left … the same info but like more space". The home
+     feed's cards open the standalone REVIEW PAGE again (reviewPageHtml — the
+     sheet's own content, rshBodyHtml, unclamped); Back returns to the feed.
+     Every other card still opens the sheet. */
+  rvpOpenFrom(key, !!compose, trigger);
+};
+/* csharpdeveloper (Eric, 2026-11-13): "have this new page where this type of
+   card is, like on the album page and other pages". Every review CARD (home
+   feed, album page, artist page, all reviews, profile) opens the review PAGE,
+   sliding in from the right. Back re-renders the page you came from, so where
+   you were is remembered here: the scroller's position, and the all-reviews
+   page if that is where the card was. rvpBack puts it back. (The Trending
+   deck's review block still opens the sheet.) */
+window.rvpOpenFrom = function (key, compose, trigger) {
+  if (!REV_INDEX[key]) return;
+  const el = trigger && trigger.closest ? trigger : null;
+  const allrev = el && el.closest('.v3-allrev');
+  let scroller = el && el.closest('.v3-allrev-body, .v3-body');
+  if (!scroller) { const sh = homeShells().find(e => e.offsetParent); scroller = sh && sh.querySelector('.v3-body'); }
+  const allF = allrev && allrev.querySelector('.v3-allrev-filters .v3-rev-filter.active');
+  window._rvpFrom = {
+    y: scroller ? scroller.scrollTop : null,
+    allrev: allrev ? (allF ? allF.dataset.f : 'popular') : null,
+    allY: allrev ? (allrev.querySelector('.v3-allrev-body') || {}).scrollTop || 0 : 0,
+  };
+  if (allrev) {   // that page's own scroll is allY; the album page under it keeps its own
+    const sh = allrev.closest('.s-home-v3'); const b = sh && sh.querySelector('.v3-body');
+    window._rvpFrom.y = b ? b.scrollTop : null;
+  }
+  openReviewPage(key, !!compose);
 };
 window.feedOpen = function (n) {
   const e = feedEvents()[n];
@@ -5213,7 +5467,7 @@ function rshHtml(R) {
    (reviewPanelHtml, screens.js) can wear the same look (Eric, 2026-09-25:
    "redo the review page so it's the same style as the inner review page").
    The sheet wraps it in `.v3-rsh-body`; the page in `.v3-rsh-body--page`. */
-function rshBodyHtml(R) {
+function rshBodyHtml(R, page) {
   const key = R.key;
   const P = window.PROFILE || {};
   const face = R.mine ? (P.pic || 'images/rp-01.jpg') : (R.face || R.pic || (typeof feedFace === 'function' ? feedFace(R.name) : ''));
@@ -5235,13 +5489,13 @@ function rshBodyHtml(R) {
              links) for this review's album, exactly as the album page's CD
              does (Eric, 2026-09-25). At the TOP of the sheet, over the review (Eric, 2026-10-28). It played a 30s preview before, and
              previews are not a feature — see PREVIEWS_ENABLED. -->
-        <div class="v3-rsh-record" onclick="rshRecordTap(this)" title="Open the album">
+        <div class="v3-rsh-record${page ? ' v3-rsh-record--page' : ''}" onclick="rshRecordTap(this)" title="Open the album">
           <div class="v3-rsh-art" style="background-image:url('${a.image || ''}')"></div>
           <div class="v3-rsh-rec-who">
             <span class="v3-rsh-rec-album">${a.album || ''}</span>
             <span class="v3-rsh-rec-artist">${a.artist || ''}${a.year ? ` · ${a.year}` : ''}</span>
           </div>
-          <div class="v3-rsh-cd" style="background-image:url('${a.image || ''}')" title="Listen on…" onclick="rshCdTap(this, event)"><div class="v3-cd-hole"></div></div>
+          ${page ? rvpRecSideHtml(a) : `<div class="v3-rsh-cd" style="background-image:url('${a.image || ''}')" title="Listen on…" onclick="rshCdTap(this, event)"><div class="v3-cd-hole"></div></div>`}
         </div>
         <div class="v3-fbr v3-fbr--sheet${R.popular ? ' is-popular' : ''}" data-k="${_revAttr(key)}">
           <div class="v3-fbr-head">
@@ -9957,41 +10211,25 @@ function runSearch() {
          account has no Listened / Listen later yet, so the wheel is topped up
          to 8 with DEMO picks off the shelf (seeded, the same every time) —
          drop the top-up once real accounts carry listens. sdsWheelInit turns it. */
-      // Each side of the toggle gets at least 5 (demo picks top it up, seeded).
+      // Each side of the toggle gets at least 6 (demo picks top it up, seeded).
       {
         const rnd = seedRand('sdsl::demo');
         const have = new Set(mine.map(m => m.ref.album + '|' + m.ref.artist));
         const cnt = w => mine.filter(m => m.why === w).length;
         arch.slice().sort(() => rnd() - 0.5).forEach(a => {
           if (have.has(a.album + '|' + a.artist)) return;
-          const why = cnt('Listened') < 5 ? 'Listened' : cnt('Listen later') < 5 ? 'Listen later' : null;
+          const why = cnt('Listened') < 6 ? 'Listened' : cnt('Listen later') < 6 ? 'Listen later' : null;
           if (!why) return;
           have.add(a.album + '|' + a.artist);
           mine.push({ ref: a, why });
         });
       }
-      const wheelItems = mine.map(m => ({ i: pick(m.ref), ref: m.ref, why: m.why }));
-      const nL = wheelItems.filter(w => w.why === 'Listened').length, nLL = wheelItems.length - nL;
-      const rail = wheelItems.length ? `
-            <div class="sds-wheel" onmousedown="event.stopPropagation()" ontouchstart="event.stopPropagation()">
-              <div class="sds-wheel-cap">
-                <div class="sds-wtog" role="tablist">
-                  <!-- round 10 (Eric: "use the icons instead"): Swipe's / the review sheet's headphones and clock -->
-                  <button type="button" class="sds-wtog-b" data-why="Listened" aria-label="Listened"><svg viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg><sup>${nL}</sup></button>
-                  <button type="button" class="sds-wtog-b" data-why="Listen later" aria-label="Listen later"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M12 6.5v5.5l3.5 2.2"/></svg><sup>${nLL}</sup></button>
-                </div>
-                <b class="sds-wcap-t"></b>
-                <span class="sds-wcap-s"></span>
-                <span class="sds-wcap-r"></span>
-              </div>
-            </div>` : '';
-
-      /* Round 3 (Eric: "some albums should have multiple cds and if theres too
-         many it says +whatever amount on the left side and lets show all 5
-         vinyl cds for the rating"). The mock FRIEND_ACTIVITY has ONE review per
-         album, so each album also gets 0–6 more of your friends, seeded off
-         its title (the same friends every time): a rating near the album's
-         and a short line (SDS_FRIEND_LINES). Real reviews come first. */
+      /* csharpdeveloper (Eric, 2026-11-13): "get rid of that asymmetrical ring
+         … leave the toggle up there but it affects the albums below … put the
+         names Listened and Listen later instead of the icons". The ring
+         (sdsWheelInit, kept unused) is gone: the Listened / Listen later
+         toggle sits on top and swaps the 2-column grid under it. Each card is
+         still cover + title + rating + the faces of friends who reviewed it. */
       const agoMin = t => { const m = /^(\d+)\s*([mhdw])/.exec(t || ''); return m ? +m[1] * ({ m: 1, h: 60, d: 1440, w: 10080 })[m[2]] : 1e9; };
       const FA = window.FRIEND_ACTIVITY || [];
       const roster = [];
@@ -10000,20 +10238,18 @@ function runSearch() {
       FA.forEach(f => {
         if (!f || !f.quote || !f.album) return;
         const k = f.album + '|' + f.artist;
-        if (!groups.has(k)) groups.set(k, { f, list: [] });
+        if (!groups.has(k)) groups.set(k, []);
         const g = groups.get(k);
-        if (!g.list.some(x => x.user === f.user)) g.list.push(f);
+        if (!g.some(x => x.user === f.user)) g.push(f);
       });
-      const albumsF = [...groups.values()]
-        .sort((x, y) => Math.min(...x.list.map(e => agoMin(e.ago))) - Math.min(...y.list.map(e => agoMin(e.ago))))
-        .slice(0, 12);
       ov._fgroups = [];
-      const grid = albumsF.map(g => {
-        const f = g.f;
-        const ref = find(f.album, f.artist) || { album: f.album, artist: f.artist, image: f.image, year: f.year };
+      /* Real friend reviews first, then 0–6 more of your friends seeded off the
+         album (the same every time), a rating near the album's (round 3). */
+      const card = ref => {
+        const real = (groups.get(ref.album + '|' + ref.artist) || []).slice().sort((x, y) => agoMin(x.ago) - agoMin(y.ago));
         const rnd = seedRand('sdsf::' + ref.album + '::' + ref.artist);
-        const base = +ref.rating || +f.rating || 4;
-        const extra = roster.filter(r => !g.list.some(x => x.user === r.user)).sort(() => rnd() - 0.5)
+        const base = +ref.rating || +(real[0] && real[0].rating) || 4;
+        const extra = roster.filter(r => !real.some(x => x.user === r.user)).sort(() => rnd() - 0.5)
           .slice(0, Math.floor(rnd() * 7))
           .map(r => ({
             user: r.user, init: r.init, grad: r.grad, album: ref.album, artist: ref.artist, image: ref.image,
@@ -10021,29 +10257,52 @@ function runSearch() {
             quote: SDS_FRIEND_LINES[Math.floor(rnd() * SDS_FRIEND_LINES.length)],
             ago: (1 + Math.floor(rnd() * 6)) + 'd', likes: Math.floor(rnd() * 40), comments: Math.floor(rnd() * 9),
           }));
-        const list = g.list.concat(extra);
+        const list = real.concat(extra);
         const i = pick(ref);
-        const gi = ov._fgroups.push({ ref, list }) - 1;
-        const r = +ref.rating || (list.reduce((t, x) => t + (+x.rating || 0), 0) / list.length);
-        const SHOWN = 3;
-        const faces = list.slice(0, SHOWN).map(x => `<span class="sds-fface" style="background-image:url('${feedFace(x.user)}')"></span>`).join('');
-        const more = list.length > SHOWN ? `<span class="sds-fface sds-fface--more">+${list.length - SHOWN}</span>` : '';
+        const r = +ref.rating || (list.length ? list.reduce((t, x) => t + (+x.rating || 0), 0) / list.length : 0);
+        let stack = '';
+        if (list.length) {
+          const gi = ov._fgroups.push({ ref, list }) - 1;
+          const SHOWN = 3;
+          const faces = list.slice(0, SHOWN).map(x => `<span class="sds-fface" style="background-image:url('${feedFace(x.user)}')"></span>`).join('');
+          const more = list.length > SHOWN ? `<span class="sds-fface sds-fface--more">+${list.length - SHOWN}</span>` : '';
+          stack = `<button class="sds-fstack" type="button" onclick="event.stopPropagation(); sdsFriendSheet(${gi})" aria-label="${list.length} friend${list.length === 1 ? '' : 's'} reviewed it">${more}${faces}</button>`;
+        }
         return `
             <div class="sds-fcard">
               <button class="sds-fcard-art" data-type="album" data-i="${i}" style="background-image:url('${ref.image}')" aria-label="Review ${_sdsEsc(ref.album)}"></button>
               <div class="sds-fcard-t" data-type="album" data-i="${i}">${_sdsEsc(ref.album)}</div>
               <div class="sds-fcard-s">${_sdsEsc(ref.artist)}</div>
               ${r ? `<div class="sds-fcard-r">${sdsDiscsHtml(r)}<b>${r.toFixed(1)}</b></div>` : ''}
-              <button class="sds-fstack" type="button" onclick="event.stopPropagation(); sdsFriendSheet(${gi})" aria-label="${list.length} friend${list.length === 1 ? '' : 's'} reviewed it">${more}${faces}</button>
+              ${stack}
             </div>`;
+      };
+      const WHYS = ['Listened', 'Listen later'];
+      const start = mine.some(m => m.why === 'Listened') ? 'Listened' : 'Listen later';
+      const tog = WHYS.map(w => {
+        const c = mine.filter(m => m.why === w).length;
+        return `<button type="button" class="sds-wtog-b${w === start ? ' on' : ''}" data-why="${w}" role="tab" aria-selected="${w === start}">${w}<sup>${c}</sup></button>`;
+      }).join('');
+      const grids = WHYS.map(w => {
+        const cards = mine.filter(m => m.why === w).map(m => card(m.ref)).join('');
+        return `<div class="sds-fgrid" data-why="${w}"${w === start ? '' : ' hidden'}>${cards || '<div class="sds-fempty">Nothing here yet</div>'}</div>`;
       }).join('');
 
       ov._last = { artists: [], albums: picks, songs: [] };
       resEl.innerHTML = `
-        ${rail ? `<div class="sds-sec sds-sec--wheel">${rail}</div>` : ''}
-        ${grid ? `<div class="sds-sec"><div class="sds-fgrid">${grid}</div></div>` : ''}`;
-      const wh = resEl.querySelector('.sds-wheel');
-      if (wh) sdsWheelInit(wh, wheelItems);
+        <div class="sds-sec sds-sec--listens">
+          <div class="sds-wtog" role="tablist">${tog}</div>
+          ${grids}
+        </div>`;
+      const tg = resEl.querySelector('.sds-wtog');
+      tg.addEventListener('click', e => {
+        const t = e.target.closest('.sds-wtog-b');
+        if (!t || t.classList.contains('on')) return;
+        e.stopPropagation();
+        sdHaptic(6);
+        tg.querySelectorAll('.sds-wtog-b').forEach(x => { const on = x === t; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); });
+        resEl.querySelectorAll('.sds-fgrid[data-why]').forEach(g => { g.hidden = g.dataset.why !== t.dataset.why; });
+      });
       return;
     }
     /* csharpdeveloper (Eric, 2026-11-09): "put the trending page … on the
@@ -13639,7 +13898,11 @@ window.profFavSync = function (rail) {
    goes with 1−cos θ rather than with θ: 26px became 52px. That second number is
    the one with a cost — it is the room `.prof-fav-rail`'s bottom padding has to
    find, and the reason the padding moved with this. */
-const PROF_ARC_DEG = 24;     // how far a disc has turned once it is one slot out
+/* 24 → 13 (csharpdeveloper, Eric 11-13): the favourites are rounded SQUARES now,
+   and a tight wheel tipped their bottom corners down awkwardly — "a larger
+   circle radius". R = spacing/θ, so roughly double the radius, half the drop;
+   the rail's 13% bottom padding has more than enough room. */
+const PROF_ARC_DEG = 13;     // how far a disc has turned once it is one slot out
 const PROF_ARC_DIM = 0.55;   // opacity given up over that same slot
 const PROF_ARC_SHR = 0.24;   // and scale — a touch deeper, so the swing reads as
                              // going AWAY from you and not merely downward
