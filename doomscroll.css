@@ -294,6 +294,14 @@
   transition: transform .15s;
 }
 .ds-rbtn:active svg { transform: scale(.9); }
+/* BIGGER RAIL ICONS (Eric 11-16: testers found the three each side a bit
+   small). 28 → 31px everywhere, and on the big phones (Plus / Pro Max, 420px+
+   wide) 34px with a 10px label. .ds-card is a size container (below). */
+.ds-rbtn svg { width: 31px; height: 31px; }
+@container (min-width: 420px) {
+  .ds-rbtn svg { width: 34px; height: 34px; }
+  .ds-rbtn { font-size: 10px; }
+}
 .ds-fav.on svg { fill: #ff4f7b; stroke: #ff4f7b; }
 /* the album's like count, over the heart once you've liked it (out of the flow, so rows don't move) */
 .ds-fav { position: relative; }

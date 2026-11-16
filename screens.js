@@ -3189,10 +3189,8 @@ window.reviewPanelHtml = function (R) {
   const call = (fn, ...args) => (typeof window[fn] === 'function' ? window[fn](...args) : '');
   return `
           <div class="rvp-scroll">
-            <!-- A plain back ARROW, upper left (Eric, 2026-11-13); it was the ring pill. -->
-            <button class="rvp-back" onclick="rvpBack()" title="Back" aria-label="Back">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-            </button>
+            <!-- No back arrow in the body: Back is the header caret, top-left where the
+                 bell sits, like every other page (Eric, 2026-11-16). -->
 
             <!-- THE SHEET'S LOOK (Eric, 2026-09-25): the page is the review sheet's
                  content — the deck's review block (face, belt, name, score with

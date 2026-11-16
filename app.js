@@ -2128,7 +2128,7 @@ window.playPreview = function (el, e) {
 window.sdHeaderBack = function (btn) {
   const scr = btn.closest('.app-screen');
   if (!scr) return;
-  if (scr.classList.contains('s-home-v3--rvp') && typeof rvpBack === 'function') return rvpBack();
+  if ((scr.classList.contains('s-home-v3--rvp') || scr.classList.contains('s-rvp')) && typeof rvpBack === 'function') return rvpBack();
   if (scr.classList.contains('s-home-v3--review')) { const lp = scr.querySelector('.v3-live-pill'); if (lp) return onLivePill(lp); }
   // Trending's Carousel (beta) view: back out to Browse (Eric, 2026-11-04).
   if (scr.classList.contains('wall2--carousel')) { const v = scr.querySelector('.wall2-view[data-view="carousel"]'); if (v) return pickWallView(v); }
@@ -3291,24 +3291,19 @@ function sdFadeOut(el, then) {
   setTimeout(go, 320);                       // an animation paused in a background tab still has to navigate
 }
 /* THE REVIEW PAGE'S RECORD SIDE (csharpdeveloper, Eric 2026-11-13): in the
-   CD's place, Like · Listened · Listen later then a + (the log sheet), and the
-   streaming services under them. The three are the album's own saved toggles
+   CD's place, Like · Listened · Listen later then a + (the log sheet), as a
+   2×2 (11-16: the streaming services row under them is gone). The three are the album's own saved toggles
    (writeDraftFlag — the same draft the album page and the log sheet read). */
 function rvpRecSideHtml(a) {
   const d = (typeof albumDraft === 'function' && albumDraft(a)) || {};
   const I = typeof SD_ICONS !== 'undefined' ? SD_ICONS : {};
   const flag = (k, ico, lbl) => `<button type="button" class="rvp-q${d[k] ? ' on' : ''}" data-k="${k}" title="${lbl}" aria-label="${lbl}" onclick="rvpFlag(this, event)">${ico || ''}</button>`;
-  const ORDER = ['deezer', 'apple', 'spotify', 'ytmusic'];
-  const svcs = (typeof SD_SERVICES !== 'undefined' ? SD_SERVICES : []).slice()
-    .sort((x, y) => ORDER.indexOf(x.id) - ORDER.indexOf(y.id))
-    .map(sv => `<button type="button" class="rvp-svc" aria-label="Open in ${sdAttr(sv.name)}" onclick="rvpSvc(this, event, '${sv.id}')">${typeof svcMarkHtml === 'function' ? svcMarkHtml(sv, 'rvp-svc-ico') : ''}</button>`).join('');
   return `
           <div class="rvp-rec-side">
             <div class="rvp-rec-acts">
               ${flag('fav', I.heart, 'Like')}${flag('listened', I.ear, 'Listened')}${flag('later', I.clock, 'Listen later')}
               <button type="button" class="rvp-q rvp-q--add" title="Review it" aria-label="Review it" onclick="rvpReviewIt(this, event)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
             </div>
-            <div class="rvp-rec-svcs">${svcs}</div>
           </div>`;
 }
 function rvpAlbumOf(el) {
@@ -10259,21 +10254,21 @@ function runSearch() {
           }));
         const list = real.concat(extra);
         const i = pick(ref);
-        const r = +ref.rating || (list.length ? list.reduce((t, x) => t + (+x.rating || 0), 0) / list.length : 0);
         let stack = '';
         if (list.length) {
           const gi = ov._fgroups.push({ ref, list }) - 1;
           const SHOWN = 3;
           const faces = list.slice(0, SHOWN).map(x => `<span class="sds-fface" style="background-image:url('${feedFace(x.user)}')"></span>`).join('');
           const more = list.length > SHOWN ? `<span class="sds-fface sds-fface--more">+${list.length - SHOWN}</span>` : '';
-          stack = `<button class="sds-fstack" type="button" onclick="event.stopPropagation(); sdsFriendSheet(${gi})" aria-label="${list.length} friend${list.length === 1 ? '' : 's'} reviewed it">${more}${faces}</button>`;
+          stack = `<button class="sds-fstack" type="button" onclick="event.stopPropagation(); sdsFriendSheet(${gi})" aria-label="${list.length} friend${list.length === 1 ? '' : 's'} reviewed it">${faces}${more}</button>`;
         }
         return `
             <div class="sds-fcard">
               <button class="sds-fcard-art" data-type="album" data-i="${i}" style="background-image:url('${ref.image}')" aria-label="Review ${_sdsEsc(ref.album)}"></button>
               <div class="sds-fcard-t" data-type="album" data-i="${i}">${_sdsEsc(ref.album)}</div>
               <div class="sds-fcard-s">${_sdsEsc(ref.artist)}</div>
-              ${r ? `<div class="sds-fcard-r">${sdsDiscsHtml(r)}<b>${r.toFixed(1)}</b></div>` : ''}
+              <!-- No disc score under the cover (Eric 11-16); the friends stack
+                   sits ON the cover, top-left (CSS). -->
               ${stack}
             </div>`;
       };

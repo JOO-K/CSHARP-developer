@@ -14032,6 +14032,20 @@ html.sd-reduce-motion *, html.sd-reduce-motion *::before, html.sd-reduce-motion 
 }
 .sds-fface--more { position: relative; z-index: 2; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #e8e2d6; background: #34343c; }
 .sds-fface--lg { width: 36px; height: 36px; margin-left: 0; box-shadow: none; }
+/* The friends stack ON the cover, its top-left, 6px in (Eric 11-16). Faces
+   climb left to right — each over the one before it — and the +N count is the
+   rightmost and on top. */
+.sds-fcard { position: relative; }
+.sds-fcard .sds-fstack { position: absolute; top: 6px; left: 6px; margin: 0; padding: 0 0 0 8px; z-index: 1; }
+.sds-fstack .sds-fface { position: relative; }
+.sds-fstack .sds-fface:nth-child(1) { z-index: 1; }
+.sds-fstack .sds-fface:nth-child(2) { z-index: 2; }
+.sds-fstack .sds-fface:nth-child(3) { z-index: 3; }
+.sds-fstack .sds-fface--more { z-index: 4; }
+/* Closer (overlap 8 → 12px) with a thin WHITE ring (Eric 11-16), both themes. */
+.sds-fcard .sds-fstack { padding-left: 12px; }
+.sds-fstack .sds-fface { margin-left: -12px; box-shadow: 0 0 0 1px #fff; }
+.sds-overlay--light .sds-fstack .sds-fface { box-shadow: 0 0 0 1px #fff; }
 
 .sds-fsheet { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 .sds-fsheet-scrim { position: absolute; inset: 0; background: rgba(0,0,0,0.5); opacity: 0; transition: opacity .2s ease; }
@@ -14206,27 +14220,19 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
 .s-home-v3 .v3-feed-items .v3-rev-card--split .v3-rsp-score .hstars { gap: 3px; }
 .s-home-v3 .v3-feed-items .v3-rev-card--split .v3-rsp-score .hstar { width: 13px !important; height: 13px !important; }
 
-/* PROFILE: favourite albums as rounded SQUARES, not CDs (csharpdeveloper,
-   Eric 11-13: "consolidate albums into all squares and profiles into circles
-   … only the profile"). The profile's favourites arc only; the hole goes,
-   and the art no longer spins during a preview. */
-.prof-fav-rail .prof-fav, .prof-fav-rail .prof-fav-img, .prof-fav-rail .prof-fav--empty { border-radius: 10px; }
-.prof-fav-rail .prof-fav-hole { display: none; }
-.prof-fav-rail .prof-fav-img.prof-fav--spin { animation: none; }
+/* PROFILE favourites are round CDs again (Eric 11-16): the 11-13 rounded-
+   square override that sat here is gone. */
 /* …and the cover's column now IS 93px, so the review text on the left stops
    8px short of it instead of running up to its edge (Eric 11-13). */
 .s-home-v3 .v3-feed-items .v3-rev-card.v3-rev-card--feed.v3-rev-card--split {
   grid-template-columns: minmax(0, 1fr) 93px; column-gap: 8px;
 }
 
-/* The review page's back ARROW (csharpdeveloper 11-13; replaces the ring pill). */
-.rvp-back {
-  display: grid; place-items: center; width: 40px; height: 40px; margin: -6px 0 8px -8px;
-  padding: 0; border: 0; border-radius: 50%; background: none; color: inherit; cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.rvp-back svg { width: 24px; height: 24px; }
-.rvp-back:active { background: rgba(232,226,214,.08); }
+/* The review page's Back is the HEADER caret, top-left where the bell sits,
+   like every other page (Eric, 2026-11-16). It replaced the in-body arrow
+   (11-13); sdHeaderBack routes it to rvpBack so the slide-out still runs. */
+.s-rvp .v3-hdr-back { display: inline-flex; }
+.s-rvp .v3-bubble--notif { display: none; }
 
 /* The standalone review page SLIDES IN from the right (csharpdeveloper 11-13),
    and rvpSlideOut takes it back out the same side. `backwards`, not `both` —
@@ -14245,20 +14251,20 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .v3-rsh-record--page .v3-rsh-rec-artist { font-size: 13px; white-space: normal; }
 .rvp-rec-side { margin-left: auto; flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-/* Two rows of four on ONE grid (Eric 11-13: "align the icons together"): the
-   services sit in the same 30px columns as Like / Listened / Later / +. */
-.rvp-rec-acts, .rvp-rec-svcs { display: grid; grid-template-columns: repeat(4, 30px); gap: 4px; justify-items: center; align-items: center; }
+/* Like / Listened / Later / + as a 2×2 of big tap targets (Eric 11-16: the
+   streaming row is gone, "make those 4 larger and easy to press"). */
+.rvp-rec-acts { display: grid; grid-template-columns: repeat(2, 44px); gap: 6px; justify-items: center; align-items: center; }
 .rvp-q {
-  width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: none;
+  width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: none;
   color: var(--sd-ink2, rgba(232,226,214,.6)); display: grid; place-items: center; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.rvp-q svg { width: 20px; height: 20px; }
+.rvp-q svg { width: 26px; height: 26px; }
 .rvp-q.on { color: var(--v3-accent, #e8a83c); }
 .rvp-q[data-k="fav"].on { color: #ff5c8a; }
 .rvp-q[data-k="fav"].on svg { fill: currentColor; }
 /* The + is a bare glyph like the others (Trending's), no disc behind it. */
-.rvp-q--add svg { width: 22px; height: 22px; }
+.rvp-q--add svg { width: 28px; height: 28px; }
 .rvp-svc { border: 0; background: none; padding: 0; cursor: pointer; line-height: 0; }
 .rvp-svc-ico {
   position: relative; display: grid; place-items: center; overflow: hidden;
