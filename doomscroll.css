@@ -256,13 +256,13 @@
 }
 .ds-tracks.has-more { -webkit-mask: linear-gradient(#000 62%, transparent); mask: linear-gradient(#000 62%, transparent); }
 .ds-tracks::-webkit-scrollbar { display: none; }
-.ds-tr, .ds-tr-msg { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0; font-size: 13.5px; }
+.ds-tr, .ds-tr-msg { display: flex; align-items: center; gap: 10px; height: 32px; padding: 0; font-size: 15px; }   /* 13.5 → 15 (Eric 11-16) */
 .ds-tr-msg { justify-content: center; opacity: .55; }
 .ds-tr { cursor: pointer; }
 .ds-tr.none { opacity: .35; cursor: default; }
-.ds-tr-n { width: 16px; flex: 0 0 auto; text-align: left; opacity: .5; font-variant-numeric: tabular-nums; }
+.ds-tr-n { width: 18px; flex: 0 0 auto; text-align: left; opacity: .5; font-variant-numeric: tabular-nums; }
 .ds-tr-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ds-tr-d { opacity: .5; font-variant-numeric: tabular-nums; font-size: 12px; }
+.ds-tr-d { opacity: .5; font-variant-numeric: tabular-nums; font-size: 13px; }
 .ds-tr.on .ds-tr-t { font-weight: 700; color: var(--ds-star); }
 .ds-tr.on .ds-tr-n { opacity: 1; color: var(--ds-star); }
 /* the song's heart + likes, left of its length */
@@ -298,10 +298,18 @@
    small). 28 → 31px everywhere, and on the big phones (Plus / Pro Max, 420px+
    wide) 34px with a 10px label. .ds-card is a size container (below). */
 .ds-rbtn svg { width: 31px; height: 31px; }
+/* Big phones (Eric 11-16, later): larger still and spread out — 36px icons,
+   the rows 20px apart (13 elsewhere), 10.5px labels. Two hooks: html.sd-bigphone
+   (index.html, the real device — its layout is scaled to under 420) and the
+   card's own width (desktop / the compare page's 440 frame). */
 @container (min-width: 420px) {
-  .ds-rbtn svg { width: 34px; height: 34px; }
-  .ds-rbtn { font-size: 10px; }
+  .ds-rbtn svg { width: 36px; height: 36px; }
+  .ds-rbtn { font-size: 10.5px; }
+  .ds-rail, .ds-lrail { gap: 20px; }
 }
+html.sd-bigphone .ds-rbtn svg { width: 36px; height: 36px; }
+html.sd-bigphone .ds-rbtn { font-size: 10.5px; }
+html.sd-bigphone .ds-rail, html.sd-bigphone .ds-lrail { gap: 20px; }
 .ds-fav.on svg { fill: #ff4f7b; stroke: #ff4f7b; }
 /* the album's like count, over the heart once you've liked it (out of the flow, so rows don't move) */
 .ds-fav { position: relative; }
@@ -383,10 +391,23 @@ html.sd-reduce-motion .ds-disc, html.sd-reduce-motion .ds-fx { animation: none !
    shorter on a 667px phone. The CD gives way first (never under 150px), and
    below 620px of room the song list shows four rows instead of five. */
 .ds-main { container-type: size; }
-.ds-cd { width: min(84%, 262px, max(150px, calc(100cqh - 410px))); }
+/* SONGS DOWN TO THE NAV (Eric 11-16: "closer to the nav bar, we don't need that
+   space", every phone). The column sits on its BOTTOM edge, 114px up, so the
+   list (25px lower, round 5) ends ~10-16px over the nav pill; the CD takes the
+   room that used to pool under the songs (cap 262 → 300). */
+.ds-main { justify-content: flex-end; bottom: 114px; }
+.ds-cd { width: min(84%, 300px, max(150px, calc(100cqh - 410px))); }
 @container (max-height: 620px) {
   .ds-tracks { height: 128px; }   /* four rows (Eric 11-09: "show 1 more song") */
   .ds-cd { width: min(84%, 262px, max(150px, calc(100cqh - 346px))); }
+}
+/* TALL ROOM (Eric 11-16: on big phones "too large a gap between the songs and
+   the nav"). The column is centred and the CD stops at 262px, so spare height
+   pooled above and below. With 700px+ of room the list shows SIX rows and the
+   CD may reach 290px; the formula keeps the 6th row's 32px out of the CD. */
+@container (min-height: 700px) {
+  .ds-tracks { height: 192px; }
+  .ds-cd { width: min(84%, 320px, max(150px, calc(100cqh - 442px))); }
 }
 /* …and the streaming icons shrink to match the three-row list (the rail is
    outside .ds-main, so it asks the card). */

@@ -15296,7 +15296,17 @@ function sdLyricHl(html) {
    focus — otherwise the blur closes the bar before the click lands. */
 (function sdKbComposer() {
   const coarse = window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches;
-  if (!coarse) return;
+  /* KEYBOARD SIMULATOR (csharpdeveloper, Eric 2026-11-16: "is there a way for
+     me to see that on the browser how it would look … on safari … on my
+     iphone"). ?kbsim runs the composer on desktop and paints a mock iOS
+     keyboard over the bottom of the screen; place() then treats the mock's
+     top edge as the visual viewport's bottom, which is what Safari reports.
+     ?kbsim=app drops Safari's ∧ ∨ Done accessory bar. Typing: your real
+     keyboard. It can't show iOS's own scroll-the-page-to-the-field jump. */
+  const SIM = /[?&]kbsim(=|&|$)/.test(location.search);
+  const SIM_ACC = SIM && !/[?&]kbsim=app/.test(location.search);
+  let simKb = null;
+  if (!coarse && !SIM) return;
   const SEL = '.sd-log-write, .v3-cmt-input';
   let src = null, bar = null, ta = null, act = null, scrim = null, closing = false;
   let hl = null, lyr = null, lyrBtn = null, lyrCtx = null;
@@ -15387,9 +15397,9 @@ function sdLyricHl(html) {
   // Sit the bar on the keyboard's top edge: the visual viewport's bottom.
   function place() {
     if (!bar || !bar.classList.contains('is-open')) return;
-    const vv = window.visualViewport;
+    const vv = SIM ? null : window.visualViewport;
     const top0 = vv ? vv.offsetTop : 0;
-    const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const bottom = vv ? vv.offsetTop + vv.height : window.innerHeight - (SIM ? simShow() : 0);
     const barTop = bottom - bar.offsetHeight;
     bar.style.top = barTop + 'px';
     let lyrH = 0;
@@ -15397,10 +15407,17 @@ function sdLyricHl(html) {
       /* The stack is the TEXT BOX's width, edge to edge (Eric, 2026-10-28: "a
          bit less wide than the review comment box lets make it the same
          width") — the box's own rect, so it holds in review and comment mode. */
-      const r = ta.getBoundingClientRect();
-      lyr.style.left = r.left + 'px'; lyr.style.width = r.width + 'px';
       const list = lyr.querySelector('.sd-kb-lyr-lines');
       const panelUp = !lyr.querySelector('.sd-kb-lyr-panel').hidden;
+      /* OPEN, the panel runs edge to edge across the top (csharpdeveloper,
+         Eric 2026-11-17: "always span the whole top instead of having
+         margins") — the phone screen's own width, flush with its top. Just
+         the pill (closed) still lines up with the text box. */
+      lyr.classList.toggle('is-full', panelUp);
+      const scr = panelUp && src && src.closest('.app-screen');
+      const sr = scr && scr.getBoundingClientRect();
+      const r = panelUp ? (sr && sr.width ? sr : { left: 0, width: window.innerWidth }) : ta.getBoundingClientRect();
+      lyr.style.left = r.left + 'px'; lyr.style.width = r.width + 'px';
       if (panelUp) {
         /* OPEN, it hangs from the TOP, 8px down, and grows toward the bar as
            the lyrics load (Eric, 2026-10-28: "use that vertical space we have
@@ -15410,18 +15427,22 @@ function sdLyricHl(html) {
         if (list) {
           list.style.maxHeight = 'none';
           const other = lyr.offsetHeight - list.offsetHeight;
-          list.style.maxHeight = Math.max(90, barTop - top0 - 2 * LYR_GAP - other) + 'px';
+          list.style.maxHeight = Math.max(90, barTop - top0 - LYR_GAP - other) + 'px';
         }
-        lyr.style.top = (top0 + LYR_GAP) + 'px';
+        lyr.style.top = top0 + 'px';
       } else {
         // Just the pill (a comment): it sits on the bar.
         lyrH = lyr.offsetHeight;
         lyr.style.top = (barTop - lyrH) + 'px';
       }
     }
-    // The scrim runs under the panel (it sits above it), so the gaps tap out.
+    /* The scrim runs under the panel AND the bar, down to the keyboard
+       (csharpdeveloper, Eric 2026-11-17: heavy blur, no "harsh line above the
+       comment box"). It used to stop at the bar's top, so the blur/dim ended
+       in a hard edge there. The bar and lyrics sit above it, so taps on them
+       still land; any gap taps out. */
     scrim.style.top = top0 + 'px';
-    scrim.style.height = Math.max(0, barTop - lyrH - top0) + 'px';
+    scrim.style.height = Math.max(0, bottom - top0) + 'px';
     syncHl();
   }
   /* ── REFERENCE LYRICS (csharpuserlive, 2026-10-20) ─────────────────────────
@@ -15641,6 +15662,7 @@ function sdLyricHl(html) {
     mirror();
     if (src && src.classList.contains('v3-cmt-input') && typeof cmtGrow === 'function') cmtGrow(src);
     bar.classList.remove('is-open'); scrim.classList.remove('is-open');
+    if (simKb) simKb.hidden = true;
     if (lyr) lyr.hidden = true;
     if (hl) { hl.hidden = true; ta.classList.remove('is-hl'); }
     if (document.activeElement === ta) ta.blur();
@@ -15663,6 +15685,41 @@ function sdLyricHl(html) {
     if (!f || !f.matches || !f.matches(SEL) || f.readOnly || f === ta) return;
     open(f);
   });
+  /* The simulator's keyboard: iPhone 15/16 Pro portrait, dark — predictive
+     row 45 + keys 216 + the globe/mic strip 30 + home indicator 45 = 336pt,
+     and Safari's form accessory bar (44) on top unless ?kbsim=app. Taps on it
+     keep the textarea focused, like the real one. Returns its height. */
+  function simShow() {
+    if (!simKb) {
+      const st = document.createElement('style');
+      st.textContent = `.sd-kbsim{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#2c2c2e;color:#fff;font:400 22px/1 -apple-system,system-ui,sans-serif;user-select:none}
+.sd-kbsim-acc{height:44px;display:flex;align-items:center;gap:22px;padding:0 16px;background:#1c1c1e;border-top:1px solid #3a3a3c;color:#0a84ff;font-size:17px}
+.sd-kbsim-acc b{margin-left:auto;font-weight:600}.sd-kbsim-acc i{font-style:normal;opacity:.9}
+.sd-kbsim-pred{height:45px;display:flex;align-items:center;justify-content:space-around;font-size:16px;color:#ddd}
+.sd-kbsim-pred span+span{border-left:1px solid #48484a;padding-left:40px}
+.sd-kbsim-row{display:flex;justify-content:center;gap:6px;padding:0 3px;margin-bottom:11px}
+.sd-kbsim-k{flex:0 0 calc((100% - 60px)/10);height:43px;border-radius:5px;background:#6b6b6e;display:grid;place-items:center;box-shadow:0 1px 0 #111}
+.sd-kbsim-k.m{background:#47474a;flex-basis:calc((100% - 60px)/10*1.35);font-size:16px}
+.sd-kbsim-k.sp{flex:1 1 auto;font-size:16px}.sd-kbsim-k.rt{flex-basis:calc((100% - 60px)/10*2.3);font-size:16px;background:#47474a}
+.sd-kbsim-bot{height:75px;display:flex;justify-content:space-between;padding:4px 26px 0;font-size:22px;color:#ccc}`;
+      document.head.appendChild(st);
+      simKb = document.createElement('div');
+      simKb.className = 'sd-kbsim';
+      const row = (keys, pre, post) => `<div class="sd-kbsim-row">${pre || ''}${keys.split('').map(k => `<div class="sd-kbsim-k">${k}</div>`).join('')}${post || ''}</div>`;
+      simKb.innerHTML = (SIM_ACC ? '<div class="sd-kbsim-acc"><i>∧</i><i>∨</i><b>Done</b></div>' : '')
+        + '<div class="sd-kbsim-pred"><span>"I"</span><span>The</span><span>I’m</span></div>'
+        + row('qwertyuiop') + row('asdfghjkl')
+        + row('zxcvbnm', '<div class="sd-kbsim-k m">⇧</div>', '<div class="sd-kbsim-k m">⌫</div>')
+        + '<div class="sd-kbsim-row"><div class="sd-kbsim-k m">123</div><div class="sd-kbsim-k m">☺</div><div class="sd-kbsim-k sp">space</div><div class="sd-kbsim-k rt">return</div></div>'
+        + '<div class="sd-kbsim-bot"><span>🌐</span><span>🎙</span></div>';
+      ['pointerdown', 'mousedown'].forEach(t => simKb.addEventListener(t, e => e.preventDefault()));
+      // The accessory bar's Done drops the keyboard, as on the phone.
+      simKb.addEventListener('click', e => { if (e.target.closest('.sd-kbsim-acc b')) ta.blur(); });
+      document.body.appendChild(simKb);
+    }
+    simKb.hidden = false;
+    return simKb.offsetHeight;
+  }
 })();
 
 /* ── THE NAV BUBBLE (0.20, 2026-10-13) ─────────────────────────────────────

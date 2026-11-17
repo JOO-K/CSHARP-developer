@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone Size Compare</title>
+<!-- Dev tool (csharpdeveloper, 2026-11-16): the app on a small and a big iPhone
+     side by side, at TRUE relative size (iPhones all draw a CSS px at about the
+     same physical size, so a Pro Max is just more px, not bigger px). The third
+     phone previews index.html's big-phone scale: the app lays out at 440/s
+     wide and is scaled ×s, exactly what the viewport meta does on the device. -->
+<style>
+  :root { --bg: #0c0c0f; --ink: #e8e2d6; --dim: rgba(232,226,214,.55); --line: rgba(255,255,255,.12); --acc: #e8a83c; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.4 system-ui, sans-serif; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .bar b { font-size: 14px; }
+  .bar button { border: 1px solid var(--line); background: none; color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; }
+  .bar button.on { border-color: var(--acc); color: var(--acc); }
+  .bar label { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); }
+  .bar output { color: var(--acc); font-weight: 700; min-width: 3.5em; }
+  .stage { height: calc(100% - 58px); display: flex; justify-content: center; align-items: flex-start; padding-top: 14px; overflow: hidden; }
+  .row { display: flex; gap: 36px; align-items: flex-end; transform-origin: top center; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .cap { text-align: center; color: var(--dim); font-size: 14px; }
+  .cap b { display: block; color: var(--ink); font-size: 16px; }
+  .phone { position: relative; overflow: hidden; border-radius: 48px; background: #000; box-shadow: 0 0 0 10px #1d1d21, 0 0 0 11px #3a3a40, 0 30px 80px rgba(0,0,0,.6); }
+  .phone iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #111116; }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <b>Phone size compare</b>
+    <span id="screens"></span>
+    <label><input id="kb" type="checkbox"> Keyboard (tap a comment or review box)</label>
+    <label>Big-phone scale <input id="s" type="range" min="1" max="1.15" step="0.01" value="1.12"> <output id="so">×1.12</output></label>
+  </div>
+  <div class="stage"><div class="row" id="row"></div></div>
+<script>
+  var PHONES = [
+    { name: 'Your iPhone', sub: '15 / 16 Pro · 393 × 852', w: 393, h: 852, scaled: false },
+    { name: 'Pro Max, today', sub: '16 Pro Max · 440 × 956', w: 440, h: 956, scaled: false },
+    { name: 'Pro Max, larger', sub: '440 × 956 · lays out at', w: 440, h: 956, scaled: true },
+  ];
+  var SCREENS = [['home', 'Home'], ['swipe', 'Swipe'], ['wall', 'Trending'], ['profile', 'Profile'], ['notifications', 'Notifications']];
+  var cur = 'home', row = document.getElementById('row'), sIn = document.getElementById('s');
+  var frames = [];
+  PHONES.forEach(function (p) {
+    var col = document.createElement('div'); col.className = 'col';
+    col.innerHTML = '<div class="phone" style="width:' + p.w + 'px;height:' + p.h + 'px"><iframe></iframe></div><div class="cap"><b>' + p.name + '</b><span></span></div>';
+    row.appendChild(col);
+    frames.push({ p: p, f: col.querySelector('iframe'), cap: col.querySelector('.cap span') });
+  });
+  function size() {
+    var s = +sIn.value;
+    document.getElementById('so').textContent = '×' + s.toFixed(2);
+    frames.forEach(function (x) {
+      var k = x.p.scaled ? s : 1;
+      x.f.style.width = Math.round(x.p.w / k) + 'px';
+      x.f.style.height = Math.round(x.p.h / k) + 'px';
+      x.f.style.transform = 'scale(' + (x.p.w / Math.round(x.p.w / k)) + ')';
+      x.cap.textContent = x.p.scaled ? x.p.sub + ' ' + Math.round(x.p.w / k) : x.p.sub;
+    });
+  }
+  function load() {
+    var swipe = cur === 'swipe';
+    frames.forEach(function (x) {
+      // Swipe isn't a screen: open Trending, then sdDoomOpen inside the frame.
+      x.f.onload = function () {
+        var w = x.f.contentWindow, n = 0;
+        // A real 420px+ phone gets html.sd-bigphone from index.html; a desktop iframe can't (fine pointer), so set it.
+        if (x.p.w >= 420) w.document.documentElement.classList.add('sd-bigphone');
+        if (!swipe) return;
+        (function go() { var vis = [].find.call(w.document.querySelectorAll('.s-wall2'), function (e) { return e.offsetParent; }); if (w.sdDoomOpen && vis) w.sdDoomOpen(vis.firstElementChild); else if (n++ < 40) setTimeout(go, 250); })();
+      };
+      x.f.src = 'index.html?screen=' + (swipe ? 'wall' : cur) + '&norec' + (document.getElementById('kb').checked ? '&kbsim' : '');
+    });
+    document.querySelectorAll('#screens button').forEach(function (b) { b.classList.toggle('on', b.dataset.s === cur); });
+  }
+  function fit() {
+    var st = document.querySelector('.stage');
+    row.style.transform = 'none';
+    var k = Math.min(1, (st.clientHeight - 20) / row.offsetHeight, (st.clientWidth - 40) / row.offsetWidth);
+    row.style.transform = 'scale(' + k + ')';
+  }
+  document.getElementById('screens').innerHTML = SCREENS.map(function (s) { return '<button data-s="' + s[0] + '">' + s[1] + '</button>'; }).join(' ');
+  document.getElementById('screens').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { cur = b.dataset.s; load(); } });
+  sIn.addEventListener('input', size);
+  document.getElementById('kb').addEventListener('change', load);
+  window.addEventListener('resize', fit);
+  size(); load(); fit();
+</script>
+</body>
+</html>

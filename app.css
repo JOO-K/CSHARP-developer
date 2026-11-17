@@ -14315,3 +14315,22 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
 
 /* A little more room between the album block and the reviewer on the review page. */
 .v3-rsh-record.v3-rsh-record--page { margin-bottom: 30px; }
+
+/* csharpdeveloper (Eric, 2026-11-17): THE COMPOSER OVER A HEAVY BLUR. "blur
+   the background pretty heavily so that the comment box and the keyboard are
+   easier to see", and "no harsh line above the comment box". The scrim now
+   runs down to the keyboard (place(), app.js) and blurs as well as dims; the
+   comment bar drops its solid strip + top hairline so nothing draws an edge,
+   and its box goes opaque so it reads on the blur. */
+.sd-kb-scrim {
+  background: rgba(0,0,0,.5);
+  -webkit-backdrop-filter: blur(22px) saturate(1.1);
+  backdrop-filter: blur(22px) saturate(1.1);
+}
+.sd-kb-bar, .sd-kb-bar.is-light { background: none; border-top: none; }
+.sd-kb-bar:not(.is-review) .sd-kb-input { background: #24242c; border-color: rgba(232,226,214,0.16); }
+.sd-kb-bar.is-light:not(.is-review) .sd-kb-input { background: #fff; border-color: rgba(26,18,8,0.14); }
+/* Reference lyrics, open: edge to edge, flush with the top (place() sets the
+   screen's width); square top, rounded bottom, no side borders. */
+.sd-kb-lyr.is-full .sd-kb-lyr-panel { border-radius: 0 0 16px 16px; border-width: 0 0 1px; }
+.sd-kb-lyr.is-full > .sd-kb-lyr-btn { margin-left: 10px; }
