@@ -393,6 +393,9 @@ function bentoHtml() {
               <!-- Producer / engineering credits, filled by populateCredits() from
                    MusicBrainz. Hidden until something comes back. -->
               <div class="v3-blue-credits" hidden></div>
+              <!-- The artist, from Wikipedia (csharpdeveloper 11-18), album page only:
+                   populateAlbumWiki fills it; sdFitBlue makes room for it. -->
+              <div class="v3-alb-wiki" hidden><p class="v3-alb-wiki-t"></p><a class="v3-alb-wiki-src" target="_blank" rel="noopener" onclick="event.stopPropagation()">From Wikipedia</a></div>
               <!-- Artist page only: label / members / description, filled by
                    populateArtistPage(). Its own node rather than a repaint of
                    the credits box, so nothing has to be put back on the way
@@ -4002,7 +4005,7 @@ function bottomNav(active = 'home') {
                    the search in review mode (albums only; an artist or a song
                    brings up the album) and the pick opens the log sheet. No
                    backticks in here: template literal. -->
-              <button class="v3-nav-item v3-nav-item--add" onclick="openReviewSearch(this, event)" title="Write a review" aria-label="Write a review"><span class="v3-nav-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span></button>
+              <button class="v3-nav-item v3-nav-item--add" onclick="openReviewSearch(this, event)" title="Write a review" aria-label="Write a review"><span class="v3-nav-add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span class="v3-nav-dots" aria-hidden="true"><i></i><i></i><i></i></span></span></button>
               <button class="v3-nav-item${on('wall')}" onclick="sdNavTab('wall')" title="Trending"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><!-- csharpdeveloper (Eric, 2026-11-09): a double music note in place of the grid --><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></button>
               <button class="v3-nav-item${on('profile')}" onclick="sdNavTab('profile')" title="Profile"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></button>
             </div>

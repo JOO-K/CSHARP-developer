@@ -712,6 +712,7 @@
     wikiPending.set(k, p);
     return p;
   }
+  window.sdWikiFor = wikiFor;   // the album page (under the credits) and the artist page's Description use it too
   function paintWiki(a) {
     const box = P.root && P.root.querySelector('.cp-wiki');
     if (!box) return;

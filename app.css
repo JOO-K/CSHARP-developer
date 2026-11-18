@@ -14482,3 +14482,84 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
 .sds-dym { padding: 14px 16px 2px; font-size: 14px; color: rgba(232,226,214,0.6); }
 .sds-dym-b { border: none; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--accent, #e8a83c); cursor: pointer; }
 .sds-overlay--light .sds-dym { color: rgba(26,18,8,0.6); }
+
+/* QUICK REVIEW IN THE NAV (csharpdeveloper, 2026-11-18). While the + list or
+   its rate sheet is up (SD_QUICK → .is-quick on the nav, sdNavBubble) the
+   bubble sits on the +, its disc fades into the bubble and the plus becomes
+   three dots bouncing like a typing indicator. */
+.v3-nav-dots { position: absolute; display: flex; gap: 3.5px; opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.v3-nav-dots i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; display: block; }
+.v3-nav-add { position: relative; transition: background-color .25s ease, color .25s ease; }
+.v3-nav-add svg { transition: opacity .18s ease, transform .25s ease, rotate .25s ease; }
+.v3-bottom-nav.is-quick .v3-nav-add { background: transparent; color: #e8e2d6; }
+.s-home-v3--light .v3-bottom-nav.is-quick .v3-nav-add { background: transparent; color: #1a1208; }
+.v3-bottom-nav.is-quick .v3-nav-add svg { opacity: 0; transform: scale(.4); }
+.v3-bottom-nav.is-quick .v3-nav-dots { opacity: 1; }
+.v3-bottom-nav.is-quick .v3-nav-dots i { animation: v3NavDot 1.1s ease-in-out infinite; }
+.v3-bottom-nav.is-quick .v3-nav-dots i:nth-child(2) { animation-delay: .15s; }
+.v3-bottom-nav.is-quick .v3-nav-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes v3NavDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+  30% { transform: translateY(-4px); opacity: 1; }
+}
+html.sd-reduce-motion .v3-bottom-nav.is-quick .v3-nav-dots i { animation: none; opacity: .8; }
+@media (prefers-reduced-motion: reduce) { .v3-bottom-nav.is-quick .v3-nav-dots i { animation: none; opacity: .8; } }
+
+/* ── ALBUM + ARTIST PAGE ROUND (csharpdeveloper, 2026-11-18) ──────────────
+   Album page: the artist's Wikipedia paragraph under the credits
+   (populateAlbumWiki; sdFitBlue measures the room for it). */
+.v3-alb-wiki { display: none; }
+.s-home-v3--review.s-home-v3--album:not(.s-home-v3--artist) .v3-alb-wiki:not([hidden]) {
+  display: block; width: 100%; padding-top: 10px; box-sizing: border-box; text-align: left;
+}
+.v3-alb-wiki-t {
+  margin: 0; font-family: var(--font-main); font-size: 12px; line-height: 1.45; font-weight: 400;
+  color: rgba(232,226,214,0.62);
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 4; overflow: hidden;
+}
+.v3-alb-wiki-src {
+  display: inline-block; margin-top: 4px;
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase;
+  color: rgba(232,226,214,0.38); text-decoration: none;
+}
+.s-home-v3--light .v3-alb-wiki-t { color: rgba(26,18,8,0.62); }
+.s-home-v3--light .v3-alb-wiki-src { color: rgba(26,18,8,0.4); }
+/* Artist page Description from Wikipedia: its label is the source link. */
+.v3-ai-src { color: inherit; text-decoration: none; }
+
+/* Artist page: the grid stops at 6 and the next row fades out (apClampGrid). */
+.v3-artist-albums .v3-aa-clamp {
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 70px), transparent);
+          mask-image: linear-gradient(to bottom, #000 calc(100% - 70px), transparent);
+}
+.v3-aa-all {
+  display: block; margin: -8px auto 6px; padding: 9px 18px; border-radius: 999px;
+  border: 1px solid rgba(232,226,214,0.18); background: rgba(232,226,214,0.06);
+  font-family: var(--font-main); font-size: 12.5px; font-weight: 600; color: #e8e2d6; cursor: pointer;
+  position: relative; z-index: 1;
+}
+.s-home-v3--light .v3-aa-all { border-color: rgba(26,18,8,0.16); background: rgba(26,18,8,0.05); color: #1a1208; }
+
+/* Artist page: Popular songs, 5 at a time (apPaintSongs). */
+.v3-ap-sec[hidden] { display: none; }
+.v3-ap-sec { padding: 6px 0 4px; }
+.v3-ap-songs { display: flex; flex-direction: column; }
+.v3-ap-song {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 7px 18px; border: none; background: none; text-align: left; cursor: pointer;
+}
+.v3-ap-n { width: 16px; flex-shrink: 0; text-align: right; font-family: var(--font-mono); font-size: 11px; color: rgba(232,226,214,0.38); }
+.v3-ap-art { width: 44px; height: 44px; border-radius: 5px; flex-shrink: 0; background: rgba(255,255,255,0.06) center/cover no-repeat; }
+.v3-ap-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.v3-ap-t { font-size: 14px; font-weight: 500; color: #e8e2d6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v3-ap-s { font-size: 11.5px; color: rgba(232,226,214,0.42); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.v3-ap-more {
+  display: block; margin: 6px auto 10px; padding: 8px 18px; border-radius: 999px;
+  border: 1px solid rgba(232,226,214,0.18); background: none;
+  font-family: var(--font-main); font-size: 12.5px; font-weight: 600; color: #e8e2d6; cursor: pointer;
+}
+.v3-ap-more[hidden] { display: none; }
+.s-home-v3--light .v3-ap-n, .s-home-v3--light .v3-ap-s { color: rgba(26,18,8,0.45); }
+.s-home-v3--light .v3-ap-t { color: #1a1208; }
+.s-home-v3--light .v3-ap-more { border-color: rgba(26,18,8,0.16); color: #1a1208; }

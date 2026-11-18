@@ -624,6 +624,7 @@ function captureScreenSnap() {
    goBack reopens the search on top of the restored view (sdsRestore). */
 function sdsTagSnap(snap) {
   if (window._sdsPending) { snap.search = window._sdsPending; window._sdsPending = null; }
+  snap.tab = window.SD_TAB || null;   // the nav bubble's owner, put back by goBack (THE NAV BUBBLE)
   return snap;
 }
 function snapView(scr) {
@@ -721,6 +722,7 @@ function enterAlbumPageState(scr, album) {
   scr.classList.add('s-home-v3--review', 's-home-v3--album');
   populateReviewPanel(scr);
   measure2Line(scr);
+  sdFitBlue(scr);   // after the title's 1- or 2-line measure
   const body = scr.querySelector('.v3-body'); if (body) body.scrollTop = 0;
 }
 // Restore an arbitrary home-shell snapshot in one shot.
@@ -733,7 +735,7 @@ function applyShellState(scr, snap) {
   if (snap.review) {
     populateReviewPanel(scr);
     if (snap.artist) populateArtistPage(scr);
-    else measure2Line(scr);
+    else { measure2Line(scr); sdFitBlue(scr); }
   }
   const body = scr.querySelector('.v3-body'); if (body) body.scrollTop = 0;
 }
@@ -750,14 +752,17 @@ window.sdOpenFromHeader = function (id) {
    e.g. a stale album page under Settings › Edit profile. */
 window.sdNavTab = function (id) {
   if (id === 'home') sdPostReset();
-  window.SD_TAB = id;   // the tab the bubble stays on through album / artist pages (sdNavBubble)
   backStack.length = 0;
   if (typeof closeSearch === 'function') closeSearch();
+  window.SD_QUICK = false;
+  window.SD_TAB = id;   // the tab that owns the view (THE NAV BUBBLE) — after closeSearch, which hands back its own
   navigate(id);
 };
 window.goBack = function (fallbackId) {
   sdHaptic(8);                                     // every Back ticks (0.20) — a no-op outside a tap
   const snap = backStack.pop();
+  if (snap && snap.tab) window.SD_TAB = snap.tab;  // the bubble goes back to the tab that owned that view
+  if (typeof sdNavBubbleSync === 'function') setTimeout(sdNavBubbleSync, 0);
   const shells = homeShells();
   if (!snap) {                                                         // nothing recorded
     if (fallbackId) { navigate(fallbackId, 'back'); return; }         // caller's default (e.g. Library)
@@ -924,6 +929,24 @@ function populateArtistPage(scr) {
   if (box) box.innerHTML = artistAlbumsHtml(a);
   const info = scr.querySelector('.v3-artist-info');
   if (info) info.innerHTML = artistInfoHtml(a);
+  sdFitBlue(scr);                                        // drops the album page's measured reserve
+  apClampGrid(scr);
+  apPaintSongs(scr, a);
+  // The real discography, once (cached per artist): repaint the grid when it lands.
+  const key = String(a.artist || '').toLowerCase();
+  const pend = ALB_MORE_P.get(key) || (!ALB_MORE_DZ.has(key) && typeof albMoreFetch === 'function' && albMoreFetch(a));
+  if (pend) pend.then(got => { if (got) apRepaintAlbums(a); });   // the album page's "More by" may have asked already
+  // Description: the hand-written one, else Wikipedia's opening paragraph.
+  if (!(ARTIST_INFO[a.artist] || {}).desc && typeof window.sdWikiFor === 'function') {
+    window.sdWikiFor(a).then(w => {
+      if (!w || !scr._album || scr._album.artist !== a.artist || !scr.classList.contains('s-home-v3--artist')) return;
+      const row = scr.querySelector('.v3-ai-row--description');
+      if (!row) return;
+      row.querySelector('.v3-ai-lbl').innerHTML = `<a class="v3-ai-src" href="${w.u}" target="_blank" rel="noopener" onclick="event.stopPropagation()">From Wikipedia</a>`;
+      row.querySelector('.v3-ai-val').textContent = w.x;
+      row.classList.remove('is-empty');
+    });
+  }
 }
 
 /* The artist's albums — replaces the rating histogram (an artist has no single
@@ -932,19 +955,32 @@ function populateArtistPage(scr) {
    and the choice survives a re-render. */
 let ARTIST_ALBUM_VIEW = 'grid';
 
+/* THE ARTIST'S OWN ALBUMS (csharpdeveloper, Eric 11-18). The shelf holds about
+   one record per artist, so this used to PAD the grid with other artists'
+   albums — Radiohead's page listed Men I Trust and Justice. Now: the shelf's
+   records by this artist + their Deezer discography (albMoreFetch, studio
+   albums only, cached per artist), newest first; repainted when it lands. */
 function artistAlbumsFor(a) {
-  const arch = window.ARCHIVE || [];
-  let albums = arch.filter(x => x.artist === a.artist);
-  // The archive holds one album per artist, so pad with the rest of the shelf —
-  // a one-cell "discography" reads as a bug rather than as a short catalogue.
-  if (albums.length < 3) albums = albums.concat(arch.filter(x => x.artist !== a.artist)).slice(0, 6);
-  return albums;
+  const k = String(a.artist || '').toLowerCase();
+  const seen = new Set(), out = [];
+  const add = x => { const t = String(x.album || '').toLowerCase().replace(/\s*[\(\[].*$/, '').trim(); if (!t || seen.has(t)) return; seen.add(t); out.push(x); };
+  (window.ARCHIVE || []).filter(x => x.artist === a.artist && x.image).forEach(add);
+  ((typeof ALB_MORE_DZ !== 'undefined' && ALB_MORE_DZ.get(k)) || []).forEach(add);
+  return out.sort((x, y) => (y.year || 0) - (x.year || 0));
 }
+const AP_ALL = new Set();          // artists whose grid is opened past 6 (View all albums)
+const AP_GRID_MAX = 6;
 
 function artistAlbumsHtml(a) {
   const albums = artistAlbumsFor(a);
   const row = ARTIST_ALBUM_VIEW === 'row';
-  const cells = albums.map(al => `
+  /* GRID: 6, then the next row fading out under "View all albums" (Eric 11-18:
+     "show up to 6 albums on the grid … with a view all albums if there is more
+     and maybe we can fade them out below"). The row view stays the full rail. */
+  const k = String(a.artist || '').toLowerCase();
+  const clamp = !row && !AP_ALL.has(k) && albums.length > AP_GRID_MAX;
+  const shown = clamp ? albums.slice(0, AP_GRID_MAX + 3) : albums;
+  const cells = shown.map(al => `
       <div class="wall2-cell" ${sdAlbumData(al)} onclick="openAlbumByData(this, event)">
         <div class="wall2-art" style="background-image:url('${al.image}')"></div>
         <div class="wall2-meta"><span class="wall2-album">${al.album}</span><span class="wall2-artist">${al.artist}</span></div>
@@ -961,9 +997,110 @@ function artistAlbumsHtml(a) {
           <button class="${row ? '' : 'active'}" title="Grid" onclick="event.stopPropagation(); setArtistAlbumView('grid')">${icoGrid}</button>
         </div>
       </div>
-      <div class="${row ? 'v3-aa-row' : 'wall2-grid'}">${cells}</div>
-      <div class="v3-aa-hd v3-aa-hd--rev"><span class="v3-aa-title">Popular reviews</span></div>`;
+      <div class="${row ? 'v3-aa-row' : 'wall2-grid'}${clamp ? ' v3-aa-clamp' : ''}">${cells}</div>
+      ${clamp ? `<button class="v3-aa-all" type="button" onclick="event.stopPropagation(); artistAllAlbums(this)">View all ${albums.length} albums</button>` : ''}
+      <!-- POPULAR SONGS (11-18): Deezer's top tracks, 5 at a time (apPaintSongs). -->
+      <div class="v3-ap-sec" hidden>
+        <div class="v3-aa-hd"><span class="v3-aa-title">Popular songs</span></div>
+        <div class="v3-ap-songs"></div>
+        <button class="v3-ap-more" type="button" onclick="event.stopPropagation(); apMoreSongs(this)" hidden>View more</button>
+      </div>`;
+  /* The "Popular reviews" heading over the review filters is gone (Eric 11-18). */
 }
+/* Clip a clamped grid to two rows and ~45% of the third, which the CSS mask fades out. */
+function apClampGrid(scr) {
+  const g = scr.querySelector('.v3-artist-albums .v3-aa-clamp');
+  if (!g) return;
+  const c = g.children[AP_GRID_MAX];
+  if (!c) return;
+  const k = scr.getBoundingClientRect().width / (scr.offsetWidth || 1) || 1;
+  const top = (c.getBoundingClientRect().top - g.getBoundingClientRect().top) / k;
+  if (top > 0) g.style.maxHeight = (top + c.offsetHeight * 0.45).toFixed(1) + 'px';
+}
+window.artistAllAlbums = function (btn) {
+  const scr = btn && btn.closest('.s-home-v3');
+  const a = scr && (scr._album || window.activeAlbum);
+  if (!a) return;
+  sdHaptic(6);
+  AP_ALL.add(String(a.artist || '').toLowerCase());
+  apRepaintAlbums(a);
+};
+function apRepaintAlbums(a) {
+  homeShells().forEach(s => {
+    if (!s.classList.contains('s-home-v3--artist') || !s._album || s._album.artist !== a.artist) return;
+    const box = s.querySelector('.v3-artist-albums');
+    if (!box) return;
+    box.innerHTML = artistAlbumsHtml(s._album);
+    apClampGrid(s);
+    apPaintSongs(s, s._album);
+  });
+}
+
+/* POPULAR SONGS (csharpdeveloper, Eric 11-18: "popular songs up to 5 and then a
+   view more that loads 5 more … keep the view more"). Deezer's artist/<id>/top
+   (up to 50, by plays), the id from the album record or one artist search,
+   both cached. A row opens the song's album page. */
+const AP_ID = new Map(), AP_TOP = new Map(), AP_SHOWN = new Map();
+const AP_STEP = 5;
+function apArtistId(a) {
+  const k = String(a.artist || '').toLowerCase();
+  if (AP_ID.has(k)) return AP_ID.get(k);
+  const p = (a.artistId ? Promise.resolve(a.artistId)
+    : dz('search/artist?q=' + encodeURIComponent(a.artist) + '&limit=5').then(r => {
+        const hit = ((r && r.data) || []).find(x => String(x.name).toLowerCase() === k) || ((r && r.data) || [])[0];
+        return hit ? hit.id : null;
+      })).catch(() => null);
+  AP_ID.set(k, p);
+  return p;
+}
+function apTopFor(a) {
+  const k = String(a.artist || '').toLowerCase();
+  if (AP_TOP.has(k)) return AP_TOP.get(k);
+  const p = apArtistId(a).then(id => id ? dz('artist/' + id + '/top?limit=50') : null)
+    .then(r => ((r && r.data) || []).filter(t => t && t.title && t.album))
+    .catch(() => { AP_TOP.delete(k); return []; });
+  AP_TOP.set(k, p);
+  return p;
+}
+function apPaintSongs(scr, a) {
+  const sec = scr.querySelector('.v3-ap-sec');
+  if (!sec || !a) return;
+  const k = String(a.artist || '').toLowerCase();
+  apTopFor(a).then(list => {
+    if (!scr._album || scr._album.artist !== a.artist || !scr.classList.contains('s-home-v3--artist')) return;
+    const sec2 = scr.querySelector('.v3-ap-sec');            // a repaint may have replaced it
+    if (!sec2) return;
+    scr._apList = list;
+    const n = Math.min(list.length, AP_SHOWN.get(k) || AP_STEP);
+    sec2.querySelector('.v3-ap-songs').innerHTML = list.slice(0, n).map((t, i) => {
+      const art = String(t.album.cover_medium || t.album.cover_big || t.album.cover_xl || '').replace(/'/g, '%27');
+      return `<button class="v3-ap-song" type="button" data-i="${i}" onclick="event.stopPropagation(); apSongOpen(this)">
+          <span class="v3-ap-n">${i + 1}</span>
+          <span class="v3-ap-art" style="background-image:url('${art}')"></span>
+          <span class="v3-ap-main"><span class="v3-ap-t">${_sdsEsc(t.title)}</span><span class="v3-ap-s">${_sdsEsc(t.album.title || '')}</span></span>
+        </button>`;
+    }).join('');
+    sec2.querySelector('.v3-ap-more').hidden = n >= list.length;
+    sec2.hidden = !list.length;
+  });
+}
+window.apMoreSongs = function (btn) {
+  const scr = btn && btn.closest('.s-home-v3');
+  const a = scr && scr._album;
+  if (!a) return;
+  sdHaptic(6);
+  const k = String(a.artist || '').toLowerCase();
+  AP_SHOWN.set(k, (AP_SHOWN.get(k) || AP_STEP) + AP_STEP);
+  homeShells().forEach(s => { if (s.classList.contains('s-home-v3--artist') && s._album && s._album.artist === a.artist) apPaintSongs(s, s._album); });
+};
+window.apSongOpen = function (el) {
+  const scr = el && el.closest('.s-home-v3');
+  const t = scr && scr._apList && scr._apList[+el.dataset.i];
+  if (!t) return;
+  const name = (t.artist && t.artist.name) || scr._album.artist;
+  const mine = (window.ARCHIVE || []).find(x => x.artist === name && String(x.album).toLowerCase() === String(t.album.title).toLowerCase());
+  openAlbumPage(mine || dzRecord(t.album, t.artist || { name }));
+};
 
 // Both home shells hold an artist page, so repaint every one of them — a
 // document-wide toggle that only redrew the clicked copy would leave the
@@ -992,6 +1129,7 @@ window.exitToBento = function (scr) {
   scr.classList.remove('s-home-v3--artist');
   scr.classList.remove('v3-rev-title-2line');
   scr._sdPage = false;
+  scr.style.removeProperty('--rev-cred-h');   // the album page's measured reserve (sdFitBlue)
   // The deck's front album, held while a page was up (fbGo).
   if (scr._fbFront && scr._fbFront !== scr._album) setMainAlbum(scr, scr._fbFront, false);
   scr._fbFront = null;
@@ -2409,7 +2547,52 @@ function populateReviewPanel(scr) {
   populateReviewList(scr, active ? active.dataset.f : 'popular');
   scr.querySelectorAll('.v3-allrev').forEach(el => el.remove());   // a new album: that page belonged to the last one
   populateAlbumMore(scr, a);
+  populateAlbumWiki(scr, a);
+  sdFitBlue(scr);
 }
+
+/* THE ARTIST FROM WIKIPEDIA, ON THE ALBUM PAGE (csharpdeveloper, Eric 11-18:
+   "can we get that wikipedia description of the artist below the producer and
+   label info"). The Player's lookup (sdWikiFor, player.js: Wikipedia's action
+   API, the intro paragraph, cached per artist in sd-wiki-v1), clamped to four
+   lines with a "From Wikipedia" link (CC BY-SA). Nothing found → nothing shown. */
+function populateAlbumWiki(scr, a) {
+  const box = scr && scr.querySelector('.v3-alb-wiki');
+  if (!box) return;
+  box.hidden = true;
+  if (!a || typeof window.sdWikiFor !== 'function') return;
+  window.sdWikiFor(a).then(w => {
+    if (!w || scr._album !== a) return;
+    box.querySelector('.v3-alb-wiki-t').textContent = w.x;
+    box.querySelector('.v3-alb-wiki-src').href = w.u;
+    box.hidden = false;
+    sdFitBlue(scr);
+  });
+}
+/* RATE ALBUM SITS UNDER WHATEVER THE INFO BLOCK HOLDS (csharpdeveloper 11-18).
+   `.v3-blue` is absolutely positioned and its credits / Wikipedia paragraph
+   hang out of its box, so `.v3-rev-mine` is pushed down by `--rev-cred-h`
+   (app.css). That was a fixed 50px — fine for three credit rows, wrong for a
+   paragraph of any length — so it is MEASURED here: the overhang is set so the
+   rate section starts SD_RATE_GAP below the block's real bottom (Eric: "bring
+   that up by 10px" — it was 36). Album page only; other states use the CSS. */
+const SD_RATE_GAP = 26;
+function sdFitBlue(scr) {
+  if (!scr) return;
+  const album = scr.classList.contains('s-home-v3--album') && !scr.classList.contains('s-home-v3--artist');
+  if (!album) { scr.style.removeProperty('--rev-cred-h'); return; }
+  const blue = scr.querySelector('.v3-blue'), mine = scr.querySelector('.v3-rev-mine');
+  const sr = scr.getBoundingClientRect();
+  if (!blue || !mine || !sr.width) return;                       // a hidden theme twin: the CSS reserve stands
+  const k = sr.width / (scr.offsetWidth || sr.width) || 1;       // the desktop viewer scales the phone
+  const kids = [...blue.children].filter(e => e.getBoundingClientRect().height > 0 && getComputedStyle(e).visibility !== 'hidden');
+  if (!kids.length) return;
+  const bottom = Math.max(...kids.map(e => e.getBoundingClientRect().bottom));
+  const cur = parseFloat(getComputedStyle(scr).getPropertyValue('--rev-cred-h')) || 0;
+  const want = Math.max(0, cur + (bottom - mine.getBoundingClientRect().top) / k + SD_RATE_GAP);
+  if (Math.abs(want - cur) > 0.5) scr.style.setProperty('--rev-cred-h', want.toFixed(1) + 'px');
+}
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => homeShells().forEach(sdFitBlue));
 
 /* ALL REVIEWS (csharpdeveloper, Eric 2026-11-13): "a full page of stacked
    reviews and if u press one it opens the full text with that open review page
@@ -2507,6 +2690,7 @@ function populateAlbumMore(scr, a) {
    open by the openAlbumPage wrapper). Keyed by artist name; [] on a miss, so
    it is asked once. */
 var ALB_MORE_DZ = ALB_MORE_DZ || new Map();   // var + guard: a render may reach populateAlbumMore before this line runs
+var ALB_MORE_P = ALB_MORE_P || new Map();     // the request in flight, per artist, so the artist page can wait on it too
 function albMoreFetch(a) {
   const key = String(a.artist || '').toLowerCase();
   if (!key) return Promise.resolve(false);
@@ -2516,7 +2700,7 @@ function albMoreFetch(a) {
         const hit = ((r && r.data) || []).find(x => String(x.name).toLowerCase() === key);
         return hit ? { id: hit.id, name: hit.name } : null;
       });
-  return idP.then(ar => ar ? dz('artist/' + ar.id + '/albums?limit=50').then(r => {
+  const p = idP.then(ar => ar ? dz('artist/' + ar.id + '/albums?limit=50').then(r => {
     const seen = new Set();
     const recs = ((r && r.data) || []).filter(dzGoodAlbum)
       .filter(al => { const t = String(al.title).toLowerCase(); if (seen.has(t)) return false; seen.add(t); return true; })
@@ -2524,6 +2708,8 @@ function albMoreFetch(a) {
     ALB_MORE_DZ.set(key, recs);
     return recs.length > 0;
   }) : false).catch(() => false);
+  ALB_MORE_P.set(key, p);
+  return p;
 }
 window.albMoreOpen = function (el) {
   const box = el.closest('.v3-alb-more');
@@ -8692,7 +8878,8 @@ window.goToMobileScreen = function(idx) {
 // ── navigate() — called from screen HTML onclick ─────────────
 window.navigate = function(targetId, direction) {
   if (targetId === 'home') sdPostReset();   // posts-since-home badge (sdPostBump)
-  if (targetId === 'wall' || targetId === 'profile') window.SD_TAB = targetId;
+  if ((targetId === 'home' || targetId === 'wall' || targetId === 'profile') && direction !== 'back' && direction !== 'guest'
+      && !window._sdPagePending && !(targetId === 'profile' && window.PROFILE_GUEST)) window.SD_TAB = targetId;
   /* Leaving the screen leaves the dial. `renderViewer` rebuilds the shells, so
      the markup carrying `--mixing` is thrown away either way — this is what
      stops `mixHost` from being left pointing at a detached node, which would
@@ -9988,6 +10175,8 @@ window.closeLogSheet = function() {
   // Opened from the +'s list and closed without posting → back to that list.
   const fromQuick = window._sdlogFromQuick;
   window._sdlogFromQuick = null;
+  window.SD_QUICK = !!fromQuick;                       // back to the + list keeps the bubble on the +; anything else lets it go
+  if (typeof sdNavBubbleSync === 'function') sdNavBubbleSync();
   if (fromQuick && ov) sdsRestore(fromQuick);
   // Onboarding's quick-review step (0.12) marks the row it just reviewed.
   if (document.querySelector('.s-onboarding') && typeof obSync === 'function') obSync();
@@ -10473,7 +10662,7 @@ function runSearch() {
 // Back from a result returns to this search, typed and scrolled as it was.
 function sdsStash(ov) {
   window._sdsPending = ov ? { q: ov.querySelector('.sds-input').value, cat: ov._cat || 'all',
-    scroll: ov.querySelector('.sds-body').scrollTop } : null;
+    scroll: ov.querySelector('.sds-body').scrollTop, prevTab: ov._prevTab || null } : null;
 }
 function sdsOpenResult(type, i) {
   const ov = document.getElementById('sd-search');
@@ -10796,6 +10985,15 @@ window.openSearch = function (triggerEl, mode, restoring) {
   const up = document.getElementById('sd-search');
   if (host.classList.contains('is-searching') && triggerEl && triggerEl.closest('.v3-bottom-nav') && up && up._mode === mode) { closeSearch(); return; }
   const ov = ensureSearchOverlay();
+  window.SD_QUICK = mode === 'review';                 // quick review: the bubble sits on the + (THE NAV BUBBLE)
+  const wasBrowse = ov._mode === 'browse' && ov.classList.contains('open');
+  if (mode === 'browse') {
+    if (!wasBrowse) ov._prevTab = window.SD_TAB === 'search' ? (ov._prevTab || null) : (window.SD_TAB || null);
+    window.SD_TAB = 'search';
+  } else if (wasBrowse && window.SD_TAB === 'search') {
+    window.SD_TAB = ov._prevTab || null;               // the + is an action: it never owns the bubble
+    ov._prevTab = null;
+  }
   ov._mode = mode;
   ov.classList.toggle('sds-overlay--review', mode === 'review');
   ov.querySelector('.sds-input').placeholder = mode === 'review' ? 'Album, artist or song' : 'Artists, albums, songs';
@@ -10837,6 +11035,7 @@ function sdsRestore(st) {
     openSearch(host, st.mode === 'review' ? 'review' : 'browse', true);
     const ov = document.getElementById('sd-search');
     if (!ov) return;
+    if (st.mode !== 'review' && st.prevTab) ov._prevTab = st.prevTab;
     ov._cat = 'all';   // csharpdeveloper: no tabs any more, always All
     ov.querySelectorAll('.sds-tab').forEach(x => x.classList.toggle('active', x.dataset.cat === ov._cat));
     const inp = ov.querySelector('.sds-input');
@@ -10852,6 +11051,12 @@ function sdsRestore(st) {
 window.closeSearch = function () {
   const ov = document.getElementById('sd-search');
   if (!ov) return;
+  // Quick review lasts while its rate sheet is up (sdsPickForReview closes the list under the sheet).
+  if (ov._mode === 'review' && !document.querySelector('#sd-log.open')) window.SD_QUICK = false;
+  if (ov._mode === 'browse' && ov.classList.contains('open') && window.SD_TAB === 'search' && !window._sdsPending) {
+    window.SD_TAB = ov._prevTab || null;              // closed: back to the tab it was opened over
+    ov._prevTab = null;
+  }
   ov.classList.remove('open');
   document.querySelectorAll('.v3-nav-item--add.is-on').forEach(b => b.classList.remove('is-on'));
   document.querySelectorAll('.is-searching').forEach(h => h.classList.remove('is-searching'));
@@ -14417,13 +14622,20 @@ function creditRowsHtml(list, label) {
   ).join('');
 }
 
+/* csharpdeveloper (Eric 11-18: "the producer info is never shown anymore").
+   This painted every shell NOT in the album state — right when credits lived
+   on the home bento, but this fork hides the bento, so the only place they
+   show is the album page, which it skipped: a Deezer album's lookup landed
+   nowhere and the page kept the LAST album's credits. Now: every shell
+   showing this album, in whatever state. */
 function paintCredits(album, list, label) {
   const html = creditRowsHtml(list, label);
   document.querySelectorAll('.s-home-v3').forEach(scr => {
     const el = scr.querySelector('.v3-blue-credits');
-    if (!el || scr.classList.contains('s-home-v3--review')) return;
+    if (!el || scr._album !== album) return;
     el.innerHTML = html;
     el.hidden = false;
+    sdFitBlue(scr);
   });
 }
 
@@ -14445,8 +14657,7 @@ function populateCredits(screenEl, album) {
   paintCredits(album, null, null);
   _credT = setTimeout(() => {
     Promise.all([creditsFor(album), labelFor(album)]).then(([list, label]) => {
-      if (currentBentoAlbum && currentBentoAlbum() !== album) return;
-      paintCredits(album, list, label);
+      paintCredits(album, list, label);   // paints only shells still showing this album
     });
   }, 520);
 }
@@ -15955,16 +16166,28 @@ let SD_NAV_X = null, _sdNavRaf = 0;
 function sdNavBubble(nav) {
   const row = nav.querySelector('.v3-nav-items'), bub = row && row.querySelector('.v3-nav-bubble');
   if (!bub || !row.offsetWidth) return;
-  const host = nav.closest('.app-screen');
-  const ov = document.getElementById('sd-search');
-  const searching = host && host.classList.contains('is-searching') && ov && ov._mode !== 'review';
-  /* csharpdeveloper (Eric 11-09): album and artist pages are built inside the
-     Home screen, so their nav marks Home. Opened from Trending or Profile, the
-     bubble stays on the tab you came from (SD_TAB, set by the tab taps). */
-  const TAB_TITLE = { wall: 'Trending', profile: 'Profile' };
-  const sub = host && (host.classList.contains('s-home-v3--album') || host.classList.contains('s-home-v3--artist'));
-  const from = sub && TAB_TITLE[window.SD_TAB] ? row.querySelector(`.v3-nav-item[title="${TAB_TITLE[window.SD_TAB]}"]`) : null;
-  const item = searching ? row.querySelector('.v3-nav-item[title="Search"]') : (from || row.querySelector('.v3-nav-item.active'));
+  /* ONE OWNER (csharpdeveloper, Eric 2026-11-18: "the nav bar bubbles are still
+     messed up when i search it goes to trending … consolidate the bubble").
+     The bubble sits on SD_TAB, the tab that owns what you are looking at:
+       · a tab tap sets it (sdNavTab), as does reaching a root screen directly
+         (navigate, not Back / a friend's profile / a page going onto home);
+       · the browse search takes it ('search') and gives it back when CLOSED
+         (closeSearch); opening a RESULT keeps it — an album found by Search
+         sits under Search, like Instagram;
+       · whatever you open from a tab keeps that tab (album / artist pages are
+         built inside Home's screen, a friend's profile inside Profile's);
+       · every Back snapshot carries it (sdsTagSnap) and goBack restores it.
+     No owner yet (first load): the screen's own .active tab. The + never
+     holds it (an action). */
+  /* QUICK REVIEW (Eric 11-18: "when u go to quick review can u make the bubble
+     go to the center and the quick review plus turns into animated ..."):
+     while the + list or the rate sheet it opened is up (SD_QUICK), the bubble
+     sits on the + and `.is-quick` turns the + into three bouncing dots. */
+  const quick = !!window.SD_QUICK;
+  nav.classList.toggle('is-quick', quick);
+  const TAB_TITLE = { home: 'Home', search: 'Search', wall: 'Trending', profile: 'Profile' };
+  const own = TAB_TITLE[window.SD_TAB] && row.querySelector(`.v3-nav-item[title="${TAB_TITLE[window.SD_TAB]}"]`);
+  const item = (quick && row.querySelector('.v3-nav-item--add')) || own || row.querySelector('.v3-nav-item.active');
   if (!item) { bub.classList.remove('is-on'); return; }
   const x = item.offsetLeft + (item.offsetWidth - bub.offsetWidth) / 2;
   const frac = x / row.offsetWidth;
