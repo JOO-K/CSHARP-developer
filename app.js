@@ -15351,7 +15351,7 @@ function sdLyricHl(html) {
     ta.style.height = 'auto';
     ta.style.height = (revMin
       ? Math.min(Math.max(ta.scrollHeight, revMin), window.innerHeight * 0.42)
-      : Math.min(ta.scrollHeight, 132)) + 'px';
+      : Math.min(ta.scrollHeight, 168)) + 'px';
     place();
   }
   /* REVIEW MODE IS THE REVIEW BOX, LIFTED (Eric 2026-10-13: "that bubble …
@@ -15475,6 +15475,7 @@ function sdLyricHl(html) {
     const el = document.createElement('div');
     el.className = 'sd-kb-lyr'; el.hidden = true;
     el.innerHTML = `<div class="sd-kb-lyr-panel" hidden>
+        <div class="sd-kb-lyr-head"><b class="sd-kb-lyr-alb"></b><span class="sd-kb-lyr-art"></span></div>
         <div class="sd-kb-lyr-songs"></div>
         <div class="sd-kb-lyr-lines"></div>
         <div class="sd-kb-lyr-src">Lyrics from LRCLIB</div>
@@ -15488,6 +15489,11 @@ function sdLyricHl(html) {
     // Keep the textarea focused (and the keyboard up) through every tap here.
     [el, lyrBtn].forEach(n => ['pointerdown', 'mousedown'].forEach(t => n.addEventListener(t, e => e.preventDefault())));
     lyrBtn.addEventListener('click', lyrToggle);
+    /* The song chips fade out on the right while more are off to the side
+       (Eric, 2026-11-17: "fade the songs out on the right side so u know theres
+       more"); the fade lifts once you've scrolled to the last one. */
+    const songs = el.querySelector('.sd-kb-lyr-songs');
+    songs.addEventListener('scroll', () => lyrFade(songs), { passive: true });
     el.addEventListener('click', e => {
       const song = e.target.closest('.sd-kb-lyr-song');
       if (song) { lyrPickSong(+song.dataset.i); return; }
@@ -15523,6 +15529,15 @@ function sdLyricHl(html) {
   const lyrNorm = x => String(x || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
   const lyrJson = u => fetch(u).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
   const lyrTrack = x => ({ title: x.trackName, artist: x.artistName, album: x.collectionName, secs: Math.round((x.trackTimeMillis || 0) / 1000) });
+  function lyrFade(songs) {
+    songs.classList.toggle('has-more', songs.scrollLeft + songs.clientWidth < songs.scrollWidth - 4);
+  }
+  /* Album over artist above the song chips (Eric, 2026-11-17). From the
+     context first, then the tracklist's own spelling once it loads. */
+  function lyrHead(album, artist) {
+    lyr.querySelector('.sd-kb-lyr-alb').textContent = album || '';
+    lyr.querySelector('.sd-kb-lyr-art').textContent = artist || '';
+  }
   function lyrMsg(t) { lyr.querySelector('.sd-kb-lyr-lines').innerHTML = `<div class="sd-kb-lyr-msg">${_sdsEsc(t)}</div>`; place(); }
   async function lyrTracks(c) {
     const it = 'https://itunes.apple.com/';
@@ -15550,6 +15565,7 @@ function sdLyricHl(html) {
   async function lyrLoadTracks(c) {
     const songs = lyr.querySelector('.sd-kb-lyr-songs');
     songs.innerHTML = '';
+    lyrHead(c.album || (c.artist ? 'Popular songs' : ''), c.album ? c.artist : c.artist);
     lyrMsg('Finding the tracklist…');
     const key = JSON.stringify([c.artist, c.album, c.song]);
     try {
@@ -15559,6 +15575,8 @@ function sdLyricHl(html) {
     c.tracks = LYR_CACHE.get(key);
     if (!c.tracks.length) { lyrMsg('No tracklist found for this one.'); return; }
     songs.innerHTML = c.tracks.map((t, i) => `<button class="sd-kb-lyr-song" type="button" data-i="${i}">${_sdsEsc(t.title)}</button>`).join('');
+    if (c.album) lyrHead(c.tracks[0].album || c.album, c.tracks[0].artist || c.artist);
+    requestAnimationFrame(() => lyrFade(songs));
     const want = c.song ? c.tracks.findIndex(t => lyrNorm(t.title).startsWith(lyrNorm(c.song))) : -1;
     lyrPickSong(want > -1 ? want : 0);
   }
@@ -15789,3 +15807,91 @@ window.addEventListener('resize', () => {
   document.querySelectorAll('.v3-nav-bubble').forEach(b => { b._x = null; });
   sdNavBubbleSync();
 });
+
+/* EDGE SWIPE = BACK (csharpdeveloper, Eric 2026-11-17: "for mobile can you
+   make it so u can go back by swiping from the left side into the center like
+   other apps for the pages with the back button"). A touch that starts within
+   EDGE px of the screen's left edge and travels right past COMMIT px (or is
+   flicked) does what that page's back caret does — sdHeaderBack on the
+   visible `.v3-hdr-back`, or the search overlay's `.sds-back`. Only pages that
+   show a back control; sheets / composers / the Swipe·Comments·Player feeds
+   are left alone. A chevron bubble follows the finger out of the edge and
+   fills in once letting go would go back.
+   ⚠ It can't slide the PREVIOUS page in under the finger the way iOS does:
+   that page isn't rendered underneath (Back rebuilds it), so the bubble is
+   the feedback and the screen's own Back transition plays on release.
+   ⚠ In Safari (not the home-screen app) iOS has its own edge swipe for the
+   browser's history; preventDefault on the claimed touch usually wins, but
+   the system gesture may still take a swipe that starts right on the bezel. */
+(function sdEdgeBack() {
+  if (!('ontouchstart' in window)) return;
+  const EDGE = 28, COMMIT = 72, MAX = 96;
+  const SKIP = '#sd-log, .v3-rsh-ov, .ds-root, .qs-root, .cp-root, .wg-sheet, .sd-kb-bar, .sd-kb-lyr, .sd-kb-scrim';
+  let g = null, tip = null;
+  const shown = el => el && el.offsetWidth > 0 && getComputedStyle(el).visibility !== 'hidden';
+  function backFor(t) {
+    if (!t || !t.closest || t.closest(SKIP)) return null;
+    const sds = t.closest('.sds-overlay');
+    if (sds) { const b = sds.querySelector('.sds-back'); return shown(b) ? () => b.click() : null; }
+    const scr = t.closest('.app-screen');
+    if (!scr) return null;
+    const btn = [...scr.querySelectorAll('.v3-hdr-back')].find(shown);
+    return btn ? () => sdHeaderBack(btn) : null;
+  }
+  function bubble() {
+    if (tip) return tip;
+    tip = document.createElement('div');
+    tip.className = 'sd-edge-back';
+    tip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
+    document.body.appendChild(tip);
+    return tip;
+  }
+  function paint(dx, y) {
+    const b = bubble(), p = Math.min(1, dx / COMMIT);
+    b.style.top = y + 'px';
+    b.style.transform = `translate(${Math.min(dx, MAX) * 0.55 - 44}px, -50%) scale(${0.7 + 0.3 * p})`;
+    b.style.opacity = String(Math.min(1, dx / 24));
+    b.classList.toggle('is-armed', dx >= COMMIT);
+  }
+  function hide() {
+    if (!tip) return;
+    tip.style.transition = 'transform .18s ease, opacity .18s ease';
+    tip.style.opacity = '0'; tip.style.transform = 'translate(-44px, -50%) scale(.7)';
+    setTimeout(() => { if (tip) tip.style.transition = ''; }, 200);
+  }
+  document.addEventListener('touchstart', e => {
+    g = null;
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (t.clientX > EDGE) return;
+    const go = backFor(e.target);
+    if (go) g = { go, x0: t.clientX, y0: t.clientY, t0: Date.now(), on: false, dx: 0, lx: t.clientX, lt: Date.now(), v: 0 };
+  }, { passive: true, capture: true });
+  document.addEventListener('touchmove', e => {
+    if (!g) return;
+    const t = e.touches[0], dx = t.clientX - g.x0, dy = t.clientY - g.y0;
+    if (!g.on) {
+      if (Math.abs(dy) > 12 && Math.abs(dy) > dx) { g = null; return; }   // a scroll, not ours
+      if (dx < 8) return;
+      g.on = true;
+    }
+    e.preventDefault(); e.stopPropagation();
+    const now = Date.now();
+    g.v = (t.clientX - g.lx) / Math.max(1, now - g.lt); g.lx = t.clientX; g.lt = now;
+    g.dx = Math.max(0, dx);
+    paint(g.dx, t.clientY);
+  }, { passive: false, capture: true });
+  const end = e => {
+    if (!g) return;
+    const d = g; g = null;
+    if (!d.on) return;
+    hide();
+    if (e.type === 'touchend' && (d.dx >= COMMIT || (d.dx > 30 && d.v > 0.5))) {
+      e.preventDefault();   // the lifted finger must not also tap what's under it
+      try { sdHaptic(8); } catch (x) {}
+      d.go();
+    }
+  };
+  document.addEventListener('touchend', end, { passive: false, capture: true });
+  document.addEventListener('touchcancel', end, { capture: true });
+})();

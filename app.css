@@ -14334,3 +14334,44 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
    screen's width); square top, rounded bottom, no side borders. */
 .sd-kb-lyr.is-full .sd-kb-lyr-panel { border-radius: 0 0 16px 16px; border-width: 0 0 1px; }
 .sd-kb-lyr.is-full > .sd-kb-lyr-btn { margin-left: 10px; }
+
+/* csharpdeveloper (2026-11-17): EDGE SWIPE = BACK — the chevron bubble that
+   follows the finger out of the left edge (sdEdgeBack, end of app.js); it
+   fills in once letting go would go back. */
+.sd-edge-back {
+  position: fixed; left: 0; top: 50%; z-index: 2147482000; pointer-events: none;
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  background: rgba(24,24,30,.82); color: #e8e2d6; opacity: 0;
+  transform: translate(-44px, -50%) scale(.7);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  box-shadow: 0 4px 16px rgba(0,0,0,.3);
+}
+.sd-edge-back svg { width: 22px; height: 22px; }
+.sd-edge-back.is-armed { background: #e8e2d6; color: #18181e; }
+
+/* csharpdeveloper (Eric, 2026-11-17): THE COMMENT BOX, ROOMIER. Same 10px
+   from both walls (Post no longer takes the right side), a bit taller, and
+   Post sits INSIDE the box on its lower-right corner, staying there as the
+   text grows onto more lines (the bar is fixed, so it's the anchor). The
+   box pads its right side so text never runs under the button. */
+.sd-kb-bar:not(.is-review) { padding: 8px 10px 10px; }
+.sd-kb-bar:not(.is-review) .sd-kb-input {
+  min-height: 56px; max-height: 168px; padding: 15px 84px 15px 15px; border-radius: 16px;
+}
+.sd-kb-bar:not(.is-review) .sd-kb-act {
+  position: absolute; right: 18px; bottom: 18px; z-index: 2;
+  height: 32px; padding: 0 14px; border-radius: 16px; font-size: 13.5px;
+}
+/* Reference lyrics: album over artist above the song chips, and the chips
+   fade out on the right while more are off to the side (lyrFade). */
+.sd-kb-lyr-head { display: flex; flex-direction: column; gap: 1px; padding: 12px 14px 0; line-height: 1.25; }
+.sd-kb-lyr-head:has(.sd-kb-lyr-alb:empty) { display: none; }
+.sd-kb-lyr-alb { font-weight: 700; font-size: 14px; color: #e8e2d6; }
+.sd-kb-lyr-art { font-size: 12.5px; color: rgba(232,226,214,0.55); }
+.sd-kb-lyr-art:empty { display: none; }
+.sd-kb-lyr.is-light .sd-kb-lyr-alb { color: #1a1208; }
+.sd-kb-lyr.is-light .sd-kb-lyr-art { color: rgba(26,18,8,0.5); }
+.sd-kb-lyr-songs.has-more {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
+}
