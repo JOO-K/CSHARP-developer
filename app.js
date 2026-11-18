@@ -9263,7 +9263,15 @@ function sdHaptic(ms) {
    nav. One capture-phase listener, so no handler has to remember to. */
 const SD_HAPTIC_TAPS = '.sd-log-opt, .v3-rev-opt, .v3-rev-q, .v3-rg-btn, .v3-cmt-like, .v3-cmt-post,'
   + ' .sd-kb-act.is-post, .sd-log-song-cmt, .v3-song-cmt, .v3-nav-item, .v3-cmt-seemore,'
-  + ' .plp-back-pill, .v3-hdr-back, .sds-back, .app-nav-back, .ob-back, .ob-mix-back, .v3-back-content';
+  + ' .plp-back-pill, .v3-hdr-back, .sds-back, .app-nav-back, .ob-back, .ob-mix-back, .v3-back-content,'
+  /* csharpdeveloper (Eric, 2026-11-17: "haptic feedback when u follow or like
+     or listen later or listened"): every like heart, follow button and the
+     Listened / Later toggles that weren't covered — review + feed likes
+     (.v3-up), the deck's like, song hearts, Swipe's rail, Comments' hearts,
+     and Follow on profiles, people-you-may-know, onboarding, notifications. */
+  + ' .v3-up, .v3-fbr-act--like, .v3-rev-score-like, .v3-song-fav, .sd-log-song-fav, .ds-tr-like,'
+  + ' .ds-fav, .ds-listened, .ds-later, .qs-like, .qs-afav,'
+  + ' .prof-act--follow, .v3-pymk-btn, .ob-follow, .ntf-follow';
 document.addEventListener('click', e => {
   const t = e.target && e.target.closest && e.target.closest(SD_HAPTIC_TAPS);
   if (t && !t.disabled) sdHaptic(8);
@@ -15309,7 +15317,7 @@ function sdLyricHl(html) {
   if (!coarse && !SIM) return;
   const SEL = '.sd-log-write, .v3-cmt-input';
   let src = null, bar = null, ta = null, act = null, scrim = null, closing = false;
-  let hl = null, lyr = null, lyrBtn = null, lyrCtx = null;
+  let hl = null, lyr = null, lyrBtn = null, lyrCtx = null, blurred = null;
 
   function build() {
     scrim = document.createElement('div');
@@ -15668,6 +15676,14 @@ function sdLyricHl(html) {
     bar.classList.toggle('is-review', !isCmt);
     if (isCmt) undress(); else dressAsReview(field);
     bar.classList.add('is-open'); scrim.classList.add('is-open');
+    /* THE BLUR IS ON THE SCREEN ITSELF (csharpdeveloper, Eric 2026-11-17:
+       "the blur isn't blurring the text review"). The scrim's backdrop-filter
+       blurred the page but iOS Safari skipped scrolling layers over it — the
+       review popup's text stayed sharp on a blurred page. A plain `filter` on
+       the phone screen blurs everything in it, sheets included (they're
+       mounted inside it, absolute — nothing fixed to break). */
+    blurred = field.closest('.app-screen');
+    if (blurred) blurred.classList.add('sd-kb-blurred');
     lyrOpen(field, light);
     ta.focus({ preventScroll: true });
     try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (x) {}
@@ -15680,6 +15696,7 @@ function sdLyricHl(html) {
     mirror();
     if (src && src.classList.contains('v3-cmt-input') && typeof cmtGrow === 'function') cmtGrow(src);
     bar.classList.remove('is-open'); scrim.classList.remove('is-open');
+    if (blurred) { blurred.classList.remove('sd-kb-blurred'); blurred = null; }
     if (simKb) simKb.hidden = true;
     if (lyr) lyr.hidden = true;
     if (hl) { hl.hidden = true; ta.classList.remove('is-hl'); }
@@ -15887,8 +15904,10 @@ window.addEventListener('resize', () => {
     if (!d.on) return;
     hide();
     if (e.type === 'touchend' && (d.dx >= COMMIT || (d.dx > 30 && d.v > 0.5))) {
-      e.preventDefault();   // the lifted finger must not also tap what's under it
+      // Tick FIRST, while touchend's user activation is fresh (iOS only plays
+      // the switch haptic inside one), then swallow the tap.
       try { sdHaptic(8); } catch (x) {}
+      e.preventDefault();   // the lifted finger must not also tap what's under it
       d.go();
     }
   };

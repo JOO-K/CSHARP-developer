@@ -14375,3 +14375,32 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
   mask-image: linear-gradient(to right, #000 calc(100% - 56px), transparent);
 }
+
+/* csharpdeveloper (2026-11-17): the composer's blur moved from the scrim's
+   backdrop-filter (iOS skipped the review popup's scrolling text) onto the
+   phone screen itself (sdKbComposer adds .sd-kb-blurred). The scrim only dims
+   now, so the page isn't blurred twice. */
+.app-screen.sd-kb-blurred { filter: blur(16px); }
+.sd-kb-scrim { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(0,0,0,.42); }
+
+/* csharpdeveloper (Eric, 2026-11-17: on the album page "the non favorite
+   icons aren't coloring up when pressed, they ... turn more opaque, we have
+   colors for them"). Their on colour was var(--star), which inside a home
+   shell is the ALBUM'S extracted colour (often pale), so Listen later only
+   brightened. Pinned to the real colours, icon AND word, every surface and
+   theme, with specificity over the shell + skin rules: Listened blue,
+   Listen later gold, Favorite pink. */
+.s-home-v3 .sd-log-opt[data-k="listened"].on .sd-log-opt-ico,
+.s-home-v3 .sd-log-opt[data-k="listened"].on .sd-log-opt-lbl,
+#sd-log .sd-log-opt[data-k="listened"].on .sd-log-opt-ico,
+#sd-log .sd-log-opt[data-k="listened"].on .sd-log-opt-lbl { color: #3b82f6; }
+.s-home-v3 .sd-log-opt[data-k="later"].on .sd-log-opt-ico,
+.s-home-v3 .sd-log-opt[data-k="later"].on .sd-log-opt-lbl,
+#sd-log .sd-log-opt[data-k="later"].on .sd-log-opt-ico,
+#sd-log .sd-log-opt[data-k="later"].on .sd-log-opt-lbl { color: #e8a83c; }
+.s-home-v3--light .sd-log-opt[data-k="later"].on .sd-log-opt-ico,
+.s-home-v3--light .sd-log-opt[data-k="later"].on .sd-log-opt-lbl { color: #c08818; }
+.s-home-v3 .sd-log-opt[data-k="fav"].on .sd-log-opt-ico,
+.s-home-v3 .sd-log-opt[data-k="fav"].on .sd-log-opt-lbl,
+#sd-log .sd-log-opt[data-k="fav"].on .sd-log-opt-ico,
+#sd-log .sd-log-opt[data-k="fav"].on .sd-log-opt-lbl { color: #ff5c8a; }
