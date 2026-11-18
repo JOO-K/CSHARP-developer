@@ -591,7 +591,7 @@ function setMainAlbum(screenEl, album, animate = false, animateText = animate) {
   loadPreview(album);
 
   // If we're in fullscreen review mode, refresh reviews for the new album
-  if (screenEl.classList.contains('s-home-v3--review')) populateReviewPanel(screenEl);
+  if (screenEl.classList.contains('s-home-v3--review') && !screenEl._sdNoPop) populateReviewPanel(screenEl);
 }
 
 // ── Fullscreen review mode ────────────────────────────────────
@@ -679,9 +679,44 @@ function bentoGesturesOn(screenEl) {
 }
 
 // Drop straight into the album page for `album`, all classes set at once (no review flash).
+/* ── PAGE LOADS (csharpdeveloper, Eric 2026-11-18: "a lot of times it lags when
+   i go to an album and it doesnt do the transition … u saw a flash of the
+   previous album before it loaded"). What was going on, and the fixes:
+     · From another tab, openAlbumPage navigated home, waited two frames while
+       the WHOLE home (feed, deck, rails) was built and painted — the flash —
+       then filled the album page on top. Now the page is entered the moment the
+       shell exists (sdShellPage marks it), populateHomeData leaves the cover
+       alone and builds the home feed later, behind the page.
+     · The old cover stayed up until the new one downloaded (sdCover keeps it),
+       and a cold colour extract for the LAST album could land after the new
+       one opened. The cover is cleared on a new album (sdClearCover), and only
+       the newest colour request applies (applyAlbumColorsUrl's _colorWant).
+     · setMainAlbum already fills the review panel when the shell is in the
+       album state, so album → album filled it twice; and every shell was filled,
+       the hidden light/dark twin included. Now once, visible shells first, the
+       hidden twin after the glide (sdEachShell).
+     · morph.js: the glide uses the TAPPED cover (it took the destination's,
+       i.e. the previous album), lifts at once, and waits up to 1.5s for a slow
+       page instead of giving up at 700ms. And any album open that came from a
+       tap on a cover glides (sdAutoMorph in morph.js), not just four wired ones. */
+function sdClearCover(scr, album) {
+  if (!scr || !album || scr._album === album) return;
+  if (typeof PIX_SEEN !== 'undefined' && PIX_SEEN.has(album.image)) return;
+  scr.querySelectorAll('.v3-album, .v3-cd').forEach(el => { if (el._pixStop) el._pixStop(); el.style.backgroundImage = 'none'; });
+}
+// Visible shells now, the hidden theme twin once the transition is over.
+function sdEachShell(fn) {
+  const all = homeShells();
+  const vis = all.filter(s => s.getClientRects().length && s.getBoundingClientRect().width);
+  const hid = all.filter(s => !vis.includes(s));
+  (vis.length ? vis : all).forEach(fn);
+  if (vis.length && hid.length) setTimeout(() => hid.forEach(s => { if (s.isConnected) fn(s); }), 480);
+}
 function enterAlbumPageState(scr, album) {
   if (window._sdMorph) { scr.classList.add('sd-morphing'); setTimeout(() => scr.classList.remove('sd-morphing'), 900); }   // morph.js glides the cover; the page's own slide stays out of its way
-  setMainAlbum(scr, album, false);
+  sdClearCover(scr, album);
+  scr._sdNoPop = true;                 // setMainAlbum fills the panel itself in the album state; once is enough
+  try { setMainAlbum(scr, album, false); } finally { scr._sdNoPop = false; }
   scr.classList.remove('s-home-v3--artist');
   scr.classList.add('s-home-v3--review', 's-home-v3--album');
   populateReviewPanel(scr);
@@ -690,7 +725,7 @@ function enterAlbumPageState(scr, album) {
 }
 // Restore an arbitrary home-shell snapshot in one shot.
 function applyShellState(scr, snap) {
-  if (snap.albumRef) setMainAlbum(scr, snap.albumRef, false);   // restores cover/name (undoes artist)
+  if (snap.albumRef) { sdClearCover(scr, snap.albumRef); scr._sdNoPop = true; try { setMainAlbum(scr, snap.albumRef, false); } finally { scr._sdNoPop = false; } }   // restores cover/name (undoes artist)
   scr.classList.toggle('s-home-v3--review', !!snap.review);
   scr.classList.toggle('s-home-v3--album',  !!snap.album);
   scr.classList.toggle('s-home-v3--artist', !!snap.artist);
@@ -737,7 +772,7 @@ window.goBack = function (fallbackId) {
       requestAnimationFrame(() => requestAnimationFrame(() => homeShells().forEach(s => applyShellState(s, snap))));
       return;
     }
-    shells.forEach(s => applyShellState(s, snap)); return;
+    sdEachShell(s => applyShellState(s, snap)); return;   // visible shell first (PAGE LOADS)
   }
   // A plain-screen snapshot — restore its sub-state, then go there WITHOUT re-randomising.
   /* A FRIEND'S profile comes back as theirs, not yours (2026-10-13). Leaving it
@@ -880,7 +915,7 @@ function populateArtistPage(scr) {
   if (!a) return;
   const banner = ARTIST_IMG[a.artist] || a.image;
   const albumEl = scr.querySelector('.v3-album');
-  if (albumEl) albumEl.style.backgroundImage = `url('${banner}')`;
+  if (albumEl) { if (albumEl._pixStop) albumEl._pixStop(); albumEl.style.backgroundImage = `url('${banner}')`; }   // a pending album-cover load must not paint over the photo
   const nameEl = scr.querySelector('.v3-blue-album');     // now the artist name
   if (nameEl) nameEl.textContent = a.artist;
   const genreEl = scr.querySelector('.v3-blue-artist');   // now the genre
@@ -956,6 +991,10 @@ window.exitToBento = function (scr) {
   scr.classList.remove('s-home-v3--album');
   scr.classList.remove('s-home-v3--artist');
   scr.classList.remove('v3-rev-title-2line');
+  scr._sdPage = false;
+  // The deck's front album, held while a page was up (fbGo).
+  if (scr._fbFront && scr._fbFront !== scr._album) setMainAlbum(scr, scr._fbFront, false);
+  scr._fbFront = null;
   // Restore the album name in full (in case Back was hit mid-typewriter) + reset fade
   const album = scr.querySelector('.v3-blue-album');
   if (album) {
@@ -1918,7 +1957,9 @@ window.openArtistPageFor = function (artistName) {
   if (!album) return;
   window.activeAlbum = album;
   const enter = s => {
-    setMainAlbum(s, album, false);
+    sdClearCover(s, album);
+    s._sdNoPop = true;
+    try { setMainAlbum(s, album, false); } finally { s._sdNoPop = false; }
     s.classList.add('s-home-v3--review', 's-home-v3--album', 's-home-v3--artist');
     populateReviewPanel(s);
     populateArtistPage(s);
@@ -1926,16 +1967,25 @@ window.openArtistPageFor = function (artistName) {
   };
   if (currentScreen().id === 'home' && homeShells().length) {
     pushBack();
-    homeShells().forEach(enter);
+    sdEachShell(enter);
     return;
   }
   const originSnap = captureScreenSnap();              // origin screen + its sub-state (persona/…)
-  navigate('home');
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    backStack.push(originSnap);                        // Back → that origin screen
-    homeShells().forEach(enter);
-  }));
+  sdShellPage(() => navigate('home'), enter);
+  backStack.push(originSnap);                          // Back → that origin screen
 };
+/* Go home and put a page on the shell IN THE SAME TICK, before anything paints
+   (see PAGE LOADS above). `_sdPage` tells populateHomeData — which runs a frame
+   later — to leave the cover alone and build the home feed after the glide. */
+function sdShellPage(go, enter) {
+  window._sdPagePending = true;
+  try { go(); } finally { window._sdPagePending = false; }
+  const shells = homeShells();
+  shells.forEach(s => { s._sdPage = true; });
+  if (shells.length) { sdEachShell(enter); return; }
+  // A viewer that renders a frame late: catch the shell when it lands.
+  requestAnimationFrame(() => requestAnimationFrame(() => homeShells().forEach(s => { s._sdPage = true; enter(s); })));
+}
 
 // Open the official album page (the fullscreen --album state on the home shell) for a given
 // album, arriving from another screen (e.g. trending). Back returns to that origin screen.
@@ -1949,16 +1999,13 @@ window.openAlbumPage = function (album, pinnedReview) {
   // Already on the home shell (e.g. tapping an album on the artist page) → transition in place.
   if (currentScreen().id === 'home' && shells.length) {
     pushBack();                                        // remember the current view (artist page, etc.)
-    shells.forEach(s => enterAlbumPageState(s, album));
+    sdEachShell(s => enterAlbumPageState(s, album));
     return;
   }
   // Coming from another screen (e.g. trending): remember it, then go home + straight to album page.
   const originSnap = captureScreenSnap();              // origin screen + its sub-state (persona/…)
-  navigate('home');
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    backStack.push(originSnap);                        // Back → that origin screen
-    homeShells().forEach(s => enterAlbumPageState(s, album));
-  }));
+  sdShellPage(() => navigate('home'), s => enterAlbumPageState(s, album));
+  backStack.push(originSnap);                          // Back → that origin screen
 };
 
 /* How far the album title may overhang the rating column.
@@ -5204,9 +5251,10 @@ function fbGo(screenEl, i) {
     requestAnimationFrame(mark); setTimeout(mark, 120);
   }
 
-  // The shell takes the front review's album.
-  setMainAlbum(screenEl, album, false);
-  applyAlbumColorsUrl(screenEl, album.image);
+  // The shell takes the front review's album — unless an album / artist page is
+  // up on it (the deck painting late behind a page would swap its cover).
+  if (screenEl.classList.contains('s-home-v3--review')) screenEl._fbFront = album;
+  else { setMainAlbum(screenEl, album, false); applyAlbumColorsUrl(screenEl, album.image); }
   // Trending (0.20): the front album's friends row and tracklist under the deck.
   if (screenEl.classList.contains('s-wall2')) { paintWallFriends(screenEl, album); wallPaintReviews(screenEl, album); }
 }
@@ -7172,12 +7220,22 @@ function populateHomeData(screenEl) {
   const idx = ((screenEl._albumIdx % seq.length) + seq.length) % seq.length;
   screenEl._albumIdx = idx;
 
-  setMainAlbum(screenEl, seq[idx], false);
-  renderFriendFeed(screenEl);
-  renderNowBar(screenEl);
-  renderFriendsBento(screenEl);   // csharpuser: the friends bento, painted AFTER the hero so its album wins
-  renderDiscoveryDeck(screenEl);  // the Trending wall's deck (a no-op elsewhere)
-  wallPaintBrowse(screenEl);      // the Trending wall's browse rails (a no-op elsewhere)
+  // An album / artist page is going straight onto this shell (sdShellPage): keep
+  // its cover, and build the home underneath once the page has glided in.
+  const homeParts = () => {
+    renderFriendFeed(screenEl);
+    renderNowBar(screenEl);
+    renderFriendsBento(screenEl);   // csharpuser: the friends bento, painted AFTER the hero so its album wins
+    renderDiscoveryDeck(screenEl);  // the Trending wall's deck (a no-op elsewhere)
+    wallPaintBrowse(screenEl);      // the Trending wall's browse rails (a no-op elsewhere)
+  };
+  if (screenEl._sdPage || window._sdPagePending) {
+    screenEl._sdPage = true;
+    setTimeout(() => { if (screenEl.isConnected) homeParts(); }, 650);
+  } else {
+    setMainAlbum(screenEl, seq[idx], false);
+    homeParts();
+  }
 
   const forSingle = screenEl.querySelector('.v3-for-single');
   if (forSingle) {
@@ -8051,8 +8109,9 @@ function applyColorVars(screenEl, c) {
 // the absolute URL getComputedStyle returns (that mismatch is what made colours lag a swipe).
 function applyAlbumColorsUrl(screenEl, url) {
   if (!screenEl || !url) return;
+  screenEl._colorWant = url;           // the newest request wins: a slow extract for the LAST album must not land late
   if (COLOR_CACHE.has(url)) { applyColorVars(screenEl, COLOR_CACHE.get(url)); return; }
-  computeAlbumColors(url).then(c => { if (c) applyColorVars(screenEl, c); });
+  computeAlbumColors(url).then(c => { if (c && screenEl._colorWant === url) applyColorVars(screenEl, c); });
 }
 
 // Colour the bento from the cover on .v3-album. A cached palette applies synchronously
@@ -10346,6 +10405,11 @@ function runSearch() {
     return;
   }
 
+  // csharpdeveloper (2026-11-18): the browse search is Apple Music's now — one
+  // ranked list that follows the query's intent (sdsAm, end of app.js). The
+  // sectioned version below is kept, unreached.
+  if (typeof sdsAm === 'function') { sdsAm(ov.querySelector('.sds-input').value, ov); return; }
+
   // ── Autocomplete suggestions (top 5) — only on the All tab ──
   if (cat === 'all') {
     const seen = new Set(), sug = [];
@@ -10765,7 +10829,10 @@ window.openReviewSearch = function (btn, e) {
    navigate to paint, so the overlay mounts into the screen you land on. */
 function sdsRestore(st) {
   const open = () => {
-    const host = [...document.querySelectorAll('.app-screen')].find(e => e.offsetParent) || document.querySelector('.app-screen');
+    // The ARRIVING screen: during the phone's crossfade the one leaving is still first in the DOM
+    // (.fade-exit), and a search mounted in it went with it (csharpdeveloper 11-18).
+    const shownScr = [...document.querySelectorAll('.app-screen')].filter(e => e.offsetParent && !e.classList.contains('fade-exit') && !e.closest('.fade-exit'));
+    const host = shownScr[shownScr.length - 1] || document.querySelector('.app-screen');
     if (!host) return;
     openSearch(host, st.mode === 'review' ? 'review' : 'browse', true);
     const ov = document.getElementById('sd-search');
@@ -12807,6 +12874,34 @@ const FB_LONG_REVIEWS = [
   { name: 'echoplex', init: 'E', grad: 'linear-gradient(135deg,#1c1c3e,#3b1fa8)', rating: 4.5,
     text: "first heard this on a night bus with a broken window and it has never sounded better than that, the rain getting in and the opener looping. every voice on it sounds like somebody you half remember. the crackle is not a gimmick, it is the room. people file it under one genre and it is technically true and completely useless as a description. it is a record about being awake when you should not be, and it is one of the only ones that gets the feeling exactly right" },
 ];
+/* MORE PARAGRAPHS (csharpdeveloper, Eric 2026-11-18: "on the homepage can we
+   [have] more paragraph length reviews"). Ten more for the pool, unsigned:
+   personaFeed signs each with whoever's card it lands on. Same rule as above,
+   album-agnostic, nothing names a record or a track. Long cards went from
+   every fourth to every other (FB_LONG_EVERY). */
+const FB_LONG_EVERY = 2;
+FB_LONG_REVIEWS.push(
+  { rating: 4,
+    text: "took me three tries to get into this one. the first time i turned it off halfway because it felt like nothing was happening, the second time i made it to the end and shrugged, and the third time something clicked around the fourth song and i suddenly understood what it was doing. it is not built around hooks, it is built around moods that shift so slowly you only notice once you are somewhere else entirely. now i put it on whenever i need to think. if it does not grab you right away, give it the third listen. that is where it lives" },
+  { rating: 3.5,
+    text: "i really wanted to love this and i only like it, which feels worse than not liking it at all. the singles are great, genuinely some of the best stuff they have done, but the album around them feels like it was assembled rather than written. there are three or four songs in the back half that sound like b-sides that wandered in from a different session. when it is good it is really good, the production is gorgeous and the vocals have never sounded more confident. i just wish they had trusted us with a shorter record. cut it to eight songs and this is a four and a half" },
+  { rating: 5,
+    text: "my dad had this playing in the car constantly when i was a kid and i spent years thinking of it as his music, background noise for long drives. i came back to it on my own last winter and it completely floored me. all the parts i used to find boring are the parts i love now, the long instrumental stretches, the way the songs refuse to resolve when you expect them to. it made me realise how much of what i think is my own taste was just quietly handed to me in the back seat. called him after and we talked about it for an hour" },
+  { rating: 4.5,
+    text: "this is a summer record that came out at the wrong time of year and i think that is part of why it took so long to find its people. it is warm and loose and full of little studio accidents they decided to keep, a laugh before a take, a guitar that is slightly out of tune on purpose. nothing about it is trying too hard. it sounds like friends in a room having a good afternoon, and somehow that is rarer than any amount of polish. i played it at a barbecue and three different people asked what it was. that never happens" },
+  { rating: 4,
+    text: "honestly the lyrics carry this whole thing for me. the music is good, solid, nothing that surprised me, but the writing is so specific it almost hurts. there is a line about leaving the porch light on for someone who already moved out that i have not stopped thinking about in weeks. a lot of records go for big universal feelings and end up saying nothing. this one goes small, names streets and dates and the colour of a jacket, and ends up saying everything. read the lyrics while you listen the first time. it is worth it" },
+  { rating: 5,
+    text: "saw them play most of this live before it came out and was worried the studio versions would lose something. they did not. if anything the record is more intense, because you can hear all the little details that get swallowed in a room full of people. the drums especially, recorded so dry and close it feels like they are being played next to your ear. it is loud when it needs to be and almost silent when it does not, and the dynamics alone put it ahead of most things released this year. turn it up, sit in the middle of the speakers" },
+  { rating: 3,
+    text: "going to be the odd one out here. i can hear that this is well made, every sound is in the right place and the arrangements are clever, but it left me completely cold. it felt like admiring a very nice building from across the street. i kept waiting for a moment where it would let me in, a crack in the surface, something a bit messy or human, and it never came. maybe that is the point and i am missing it. i will try again in a year. for now it is a three from me, all of it for the craft" },
+  { rating: 4.5,
+    text: "i listened to this every morning for a month on my walk to work and it has completely rewired that route for me. there is a song that starts right as i hit the bridge and another one that lands as i turn the last corner and i would not trade that for anything. it is that kind of album, one that attaches itself to a place. musically it sits somewhere between a few genres without belonging to any of them, and the sequencing is so good it feels like one long piece. the only reason it is not a five is the closer, which goes on two minutes too long" },
+  { rating: 5,
+    text: "nothing i write here is going to do it justice so i will keep it simple. i was in a bad place when this came out, not sleeping, not eating properly, not really talking to anyone. i put this on one night because a friend sent it to me with no message, just the link, and i listened to the whole thing lying on the floor of my room. i am not going to pretend an album fixed anything. but it sat with me for forty minutes and did not ask for anything back, and that was exactly what i needed. thank you to whoever made this" },
+  { rating: 4,
+    text: "fun fact, i bought this on vinyl purely because the cover looked cool in the shop and i had never heard of them. best blind buy i have ever made. side a is all energy, short sharp songs that are over before you can get bored, and side b slows right down into something stranger and more patient. flipping the record halfway through actually makes sense here, it feels like two moods of the same person. the pressing sounds great too, warm and full. if you can find a copy, get it on wax, it is how it is meant to be heard" },
+);
 /* THE CAST (Eric, 2026-09-23: "a larger variety of usernames"). The demo's
    FRIEND_ACTIVITY has eight people; a feed dealt from eight names repeats
    fast. These forty follow the onboarding's own handle rule — 4–18 chars,
@@ -12868,16 +12963,20 @@ function personaFeed(p) {
   // Sixteen cards a deal (the demo list's size), each a different person where the cast allows.
   const people = shuffled(cast);
   const deck = shuffled(A);
+  const longs = shuffled(FB_LONG_REVIEWS);
   const cards = deck.slice(0, Math.min(16, A.length)).map((a, i) => {
     let who = people[i % people.length];
     const fresh = (a.reviews || []).filter(r => !used.has(r.text));
     let rev = fresh.length ? pick(fresh) : ((a.reviews && a.reviews.length) ? pick(a.reviews) : null);
-    // Every fourth card: a LONG one, from the pool above, written into the album too.
-    if (i % 4 === 1) {
-      const L = FB_LONG_REVIEWS[Math.floor(i / 4) % FB_LONG_REVIEWS.length];
+    // Every other card (FB_LONG_EVERY): a LONG one, from the pool above, written into the album too.
+    // The pool is dealt shuffled, so no paragraph shows twice on one feed.
+    if (i % FB_LONG_EVERY === 1) {
+      const L0 = longs[Math.floor(i / FB_LONG_EVERY) % longs.length];
+      if (L0.name) who = cast.find(c => c.user === L0.name) || who;
+      // An unsigned one is signed by this card's person, so the album page credits the same name.
+      const L = L0.name ? L0 : { name: who.user, init: who.init, grad: who.grad, rating: L0.rating, text: L0.text };
       if (!(a.reviews || []).some(r => r.text === L.text)) a.reviews = [...(a.reviews || []), L];
       rev = L;
-      who = cast.find(c => c.user === L.name) || who;
     }
     if (rev) used.add(rev.text);
     return {
@@ -15159,6 +15258,90 @@ function sdIntroHtml() {
     </svg>
     <div class="sd-intro-word" role="img" aria-label="Spindeck"></div>`;
 }
+/* THE LOGIN'S LOGO (csharpdeveloper, Eric 2026-11-18: "use the logo we use for
+   the transition animation"). The same four paths as the intro; pathLength=1
+   lets the CSS draw them in (.auth-belt, app.css) without measuring. */
+function sdAuthLogoHtml() {
+  const p = 'class="auth-belt-p" pathLength="1"';
+  return `
+    <svg class="auth-belt" viewBox="-20 -20 1140 1005" aria-hidden="true">
+      <path ${p} style="--d:0s" d="${SD_INTRO_BELT}"/>
+      <circle ${p} style="--d:.35s" cx="480.68" cy="479.79" r="409.75" transform="rotate(-90 480.68 479.79)"/>
+      <circle ${p} style="--d:.7s" cx="480.68" cy="479.79" r="41.85" transform="rotate(-90 480.68 479.79)"/>
+      <circle ${p} style="--d:.8s" cx="969.17" cy="833.22" r="79.7" transform="rotate(-90 969.17 833.22)"/>
+    </svg>`;
+}
+
+/* THE LOGIN'S BACKGROUND (csharpdeveloper, Eric 2026-11-18: "blurred album
+   covers like we do in the trending page but have them fade out into each
+   other … a cool effect that never ends, a natural gradient animation").
+   Four big blurred covers (Trending's .ds-bg look) each run their own slow
+   life: a random cover fades up while drifting, holds, fades out as it drifts
+   on, then comes back as a different cover somewhere else. Their lives are
+   staggered and of different lengths, so there are always two or three
+   overlapping and the mix never repeats.
+   ⚠ Covers come from ARCHIVE, which under a persona (eric is the default)
+   is Deezer URLs, so they're asked for at 250px. ⚠ Only four layers: Trending crashed iPhones by
+   stacking blurred layers (cullBgs, doomscroll.js). ⚠ Each layer stops when
+   its screen is torn out (navigate rebuilds the phone), checked every cycle. */
+const SD_AUTH_BG_LAYERS = 4;
+function sdAuthBg(host) {
+  if (!host || host._sdBg) return;
+  host._sdBg = true;
+  // Whatever the shelf holds: local covers, or a persona's Deezer ones at 250px (a blur that strong can't tell).
+  const pool = [...new Set((window.ARCHIVE || []).map(a => a && a.image).filter(Boolean)
+    .map(u => String(u).replace(/\/(\d+)x\d+-/, '/250x250-')))];
+  if (!pool.length) return;
+  let last = [];
+  const pick = () => {
+    let u, n = 0;
+    do { u = pool[Math.floor(Math.random() * pool.length)]; } while (last.includes(u) && ++n < 12);
+    last = [u, ...last].slice(0, 8);
+    return u;
+  };
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const still = sdReducedMotion();
+  for (let k = 0; k < SD_AUTH_BG_LAYERS; k++) {
+    // An <img>, not a background-image: Wireframe mode swaps any style="…images/album-…" for a placeholder.
+    const layer = document.createElement('img');
+    layer.className = 'auth-bg-l';
+    layer.alt = ''; layer.decoding = 'async';
+    host.appendChild(layer);
+    if (still) {   // reduced motion: a still wash of covers, no drift
+      layer.src = pick();
+      layer.style.opacity = '.8';
+      layer.style.transform = `translate(${rnd(-20, 20)}%, ${(k - 1.5) * 40}%)`;
+      continue;
+    }
+    const life = (first) => {
+      if (!host.isConnected) return;
+      layer.src = pick();
+      const D = rnd(13000, 19000);
+      // Each layer keeps to its own band of the screen, loosely, so the colour covers top to bottom.
+      const band = (k - (SD_AUTH_BG_LAYERS - 1) / 2) * 34;
+      const y0 = band + rnd(-18, 18), y1 = y0 + rnd(-22, 22);
+      const x0 = rnd(-28, 28), x1 = x0 + rnd(-24, 24);
+      const s0 = rnd(.9, 1.1), s1 = s0 + rnd(.15, .35), r0 = rnd(-25, 25), r1 = r0 + rnd(-30, 30);
+      const a = layer.animate([
+        { opacity: 0,   transform: `translate(${x0}%, ${y0}%) scale(${s0}) rotate(${r0}deg)`, easing: 'ease-in-out' },
+        { opacity: .92, offset: .38, easing: 'linear' },
+        { opacity: .92, offset: .62, easing: 'ease-in-out' },
+        { opacity: 0,   transform: `translate(${x1}%, ${y1}%) scale(${s1}) rotate(${r1}deg)` },
+      ], { duration: D, fill: 'both' });
+      // The first round starts part-way through, staggered, so the screen opens full of colour.
+      const skip = first ? D * (0.25 + 0.5 * (k / SD_AUTH_BG_LAYERS)) : 0;
+      a.currentTime = skip;
+      setTimeout(() => life(false), D - skip);
+    };
+    life(true);
+  }
+}
+(function sdAuthBgWatch() {
+  const scan = () => document.querySelectorAll('.auth-bg').forEach(el => { if (!el._sdBg) sdAuthBg(el); });
+  new MutationObserver(scan).observe(document.documentElement, { childList: true, subtree: true });
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scan); else scan();
+})();
+
 // The logo's ink against the screen's colour: dark ink on a light screen, else the house off-white.
 function sdIntroInk(bg) {
   const m = String(bg).match(/\d+(\.\d+)?/g);
@@ -15927,3 +16110,402 @@ window.addEventListener('resize', () => {
   document.addEventListener('touchend', end, { passive: false, capture: true });
   document.addEventListener('touchcancel', end, { capture: true });
 })();
+
+/* ── SEARCH, APPLE MUSIC STYLE (csharpdeveloper, Eric 2026-11-18) ───────────
+   Eric: "copy apple music's search function as best as possible … artist then
+   album then songs and then when it gets more specific with more characters it
+   turns into a more defined search aka if u look up a song it might also show
+   u covers etc". One ranked list instead of Artists / Albums / Songs boxes,
+   and it reads the query's INTENT, which sharpens as you type:
+     · ARTIST (the default, short queries): the artist, then their albums,
+       then their songs (most played first), then other title matches.
+     · ALBUM (an album title typed out): that album, its artist, its songs.
+     · SONG (a song title typed out, or "title artist"): the song — its most
+       played version — then OTHER VERSIONS: covers by other artists, and the
+       same artist's live / remix / acoustic cuts, then its album and artist.
+       Entering song mode fires one more Deezer call, track:"<title>", to
+       gather the versions.
+   Candidates are the local catalogue (buildSearchIndex) plus Deezer's artist /
+   album / track search, merged, de-duplicated, local first on ties. The list
+   paints from local at once and repaints when Deezer answers (cached per
+   query). Rows index ov._last.{artists,albums,songs} so sdsOpenResult (and its
+   Deezer wrapper above) opens them unchanged; a song opens its album.
+   The + flow ('review' mode) is untouched. */
+const SDS_AM = { cache: new Map(), ver: new Map(), art: new Map(), t: 0 };
+function sdsNorm(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s*[\(\[][^\)\]]*[\)\]]/g, ' ')        // (feat. …) [Remastered]
+    .replace(/\s+-\s+.*$/, '')                        // " - Live at …", " - 2011 Remaster"
+    .replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// 0…1: how well `q` names `text`. Exact 1; a prefix scales with how much is typed.
+function sdsMatch(text, q) {
+  const t = sdsNorm(text);
+  if (!t || !q) return 0;
+  if (t === q) return 1;
+  if (t.startsWith(q)) return 0.62 + 0.33 * (q.length / t.length);
+  if (q.startsWith(t + ' ')) return 0.9;              // "creep radiohead" names Creep
+  const words = t.split(' ');
+  if (words.some(w => w.startsWith(q))) return 0.45 + 0.2 * (q.length / t.length);
+  if (t.includes(q)) return 0.3;
+  return sdsFuzzy(t, q);
+}
+/* TYPOS (Eric 11-18: "charlie" should still find Charli xcx). When the letters
+   don't match, an edit distance against the same length of the name — from its
+   start or any word's start — lets 1 slip through (2 from 7 letters typed).
+   Scores sit under every real match, so a typo never outranks the right spelling. */
+function sdsLev(a, b) {
+  const m = a.length, n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+function sdsFuzzy(t, q) {
+  if (q.length < 4) return 0;
+  const allow = q.length >= 7 ? 2 : 1;
+  const starts = [0];
+  for (let i = 1; i < t.length; i++) if (t[i - 1] === ' ') starts.push(i);
+  let best = 9;
+  starts.forEach((st, k) => {
+    for (let L = q.length - 1; L <= q.length + 1; L++) {
+      if (st + L > t.length + 1) continue;
+      const d = sdsLev(q, t.slice(st, st + L).trim()) + (k ? 0.5 : 0);
+      if (d < best) best = d;
+    }
+  });
+  return best <= allow ? Math.max(0.36, 0.52 - 0.07 * best) : 0;
+}
+// A song or album also answers to "title artist" / "artist title".
+function sdsMatchWith(title, artist, q) {
+  const a = sdsMatch(title, q);
+  // Only once the query runs PAST one name into the other — "ra" must not match every Radiohead song.
+  const nt = sdsNorm(title), na = sdsNorm(artist);
+  const both = Math.max(q.length > nt.length ? sdsMatch(title + ' ' + artist, q) : 0,
+                        q.length > na.length ? sdsMatch(artist + ' ' + title, q) : 0);
+  return Math.max(a, both >= 0.62 ? Math.min(1, both + 0.05) : 0);
+}
+function sdsVersionTag(title) {
+  const t = String(title || '').toLowerCase();
+  if (/\blive\b/.test(t)) return 'Live';
+  if (/\bacoustic\b|\bunplugged\b/.test(t)) return 'Acoustic';
+  if (/\bremix\b|\bmix\)|\bedit\b/.test(t)) return 'Remix';
+  if (/\bdemo\b/.test(t)) return 'Demo';
+  if (/\binstrumental\b/.test(t)) return 'Instrumental';
+  if (/\bremaster/.test(t)) return 'Remastered';
+  return '';
+}
+const sdsSmall = u => String(u || '').replace(/\/(\d+)x\d+-/, '/250x250-');
+
+/* AGGREGATE, NOT YOUR TASTE (Eric 11-18: "its going off my taste lol not like
+   an aggregate"). Once Deezer answers, the list is DEEZER'S — ranked by its
+   global numbers (artist fans, track plays, its own album order). The local
+   shelf only (1) fills the list for the moment before Deezer answers, and
+   (2) lends its record to a matching Deezer result, so a tap opens the copy
+   you already have. Nothing local gets a boost or a row of its own. */
+function sdsAmCandidates(q, remote) {
+  const idx = buildSearchIndex();
+  const ak = n => sdsNorm(n);
+  const localAlb = new Map(idx.albums.map(a => [ak(a.artist) + '|' + ak(a.album), a]));
+  const localArt = new Set(idx.artists.map(a => ak(a.name)));
+  if (!remote) {
+    // Before Deezer: the shelf, flat (no popularity), so something shows at once.
+    const artists = idx.artists.map(a => ({ kind: 'artist', name: a.name, image: a.image, count: a.count, s: sdsMatch(a.name, q), pop: 0.3, local: true })).filter(x => x.s);
+    const albums = idx.albums.map(a => ({ kind: 'album', album: a.album, artist: a.artist, image: a.image, year: a.year, ref: a.ref, s: sdsMatchWith(a.album, a.artist, q), sa: sdsMatch(a.artist, q), pop: 0.3 })).filter(x => x.s || x.sa);
+    const songs = idx.songs.map(x => ({ kind: 'song', title: x.title, artist: x.artist, album: x.album, image: x.image, ref: x.ref, s: sdsMatchWith(x.title, x.artist, q), sa: sdsMatch(x.artist, q), pop: 0.2, nt: sdsNorm(x.title) })).filter(x => x.s || x.sa);
+    return { artists, albums, songs };
+  }
+  const artists = new Map(), albums = new Map(), songs = new Map();
+  (remote.artists || []).forEach(a => {
+    if (!a || !a.name) return;
+    const s = sdsMatch(a.name, q); if (!s) return;
+    const k = ak(a.name); if (artists.has(k)) return;
+    const local = localArt.has(k);
+    artists.set(k, { kind: 'artist', name: a.name, image: a.picture_xl || a.picture_big || a.picture_medium || '', count: a.nb_album || 0, s,
+      pop: Math.min(1, Math.log10((a.nb_fan || 0) + 1) / 7.5), local, dzId: a.id, _dzArtist: local ? null : { id: a.id, name: a.name } });
+  });
+  (remote.albums || []).forEach((a, i) => {
+    if (!a || !a.title || !a.artist) return;
+    const s = sdsMatchWith(a.title, a.artist.name, q), sa = sdsMatch(a.artist.name, q);
+    if (!s && !sa) return;
+    const k = ak(a.artist.name) + '|' + ak(a.title);
+    if (albums.has(k)) return;
+    const single = a.record_type && a.record_type !== 'album';
+    const mine = localAlb.get(k);
+    albums.set(k, { kind: 'album', album: a.title, artist: a.artist.name, image: a.cover_xl || a.cover_big || '', s, sa,
+      pop: Math.max(0.1, 0.7 - i * 0.03) - (single ? 0.25 : 0), dz: a, single: !!single, ref: mine ? mine.ref : null });
+  });
+  (remote.tracks || []).forEach(t => {
+    if (!t || !t.title || !t.artist || !t.album) return;
+    const s = sdsMatchWith(t.title_short || t.title, t.artist.name, q), sa = sdsMatch(t.artist.name, q);
+    const k = ak(t.artist.name) + '|' + String(t.title).toLowerCase();   // raw title: "Creep (Live)" stays its own row
+    if (songs.has(k)) return;
+    const mine = localAlb.get(ak(t.artist.name) + '|' + ak(t.album.title));
+    songs.set(k, { kind: 'song', title: t.title, artist: t.artist.name, album: t.album.title, image: t.album.cover_xl || t.album.cover_big || '',
+      s, sa, pop: Math.min(1, (t.rank || 0) / 9e5), dzT: t, nt: sdsNorm(t.title_short || t.title), tag: sdsVersionTag(t.title), ref: mine ? mine.ref : null });
+  });
+  return { artists: [...artists.values()], albums: [...albums.values()], songs: [...songs.values()] };
+}
+
+// What the query is after, from the best match of each kind.
+function sdsAmLeadArtist(c) {
+  return c.artists.filter(a => a.s >= 0.36).sort((x, y) => y.pop * (0.3 + 0.7 * y.s) - x.pop * (0.3 + 0.7 * x.s))[0] || null;
+}
+function sdsAmIntent(q, c) {
+  const best = arr => arr.reduce((b, x) => (x.s > (b ? b.s : 0) || (b && x.s === b.s && x.pop > b.pop)) ? x : b, null);
+  const B = best(c.albums.filter(x => !x.single)), S = best(c.songs);
+  // The artist that counts is the most FAMOUS one the letters name, not the closest spelling:
+  // "xcx" is Charli xcx (1.9M fans), not a 15-fan "xcxel" or IDK's song "xcx".
+  const A = sdsAmLeadArtist(c);
+  const as = A ? A.s : 0, bs = B ? B.s : 0, ss = S ? S.s : 0;
+  // An artist typed out in full, and well known, keeps artist mode ("adele", not the song "Adele").
+  // An artist the letters start (Taylor Swift for "taylor") wins over a less played song
+  // ("hello" is Adele's song, not Helloween: a big song beats a big artist it out-plays).
+  const bigArtist = A && A.pop >= 0.55 && (as >= 0.99 || A.pop >= (S ? S.pop : 0) + 0.15);
+  // An album and a song with the same title ("brat"): the same artist's → the album; else the more played.
+  // The album IS the artist's ("charli" → Charli xcx's Charli): show the artist, that album first under them.
+  if (A && A.pop >= 0.55 && B && bs >= 0.92 && sdsNorm(B.artist) === sdsNorm(A.name)) return { mode: 'artist', A, B, S };
+  const albumWins = B && bs >= 0.92 && bs >= ss && (!S || (sdsNorm(B.artist) === sdsNorm(S.artist) ? S.pop < 0.6 : B.pop >= S.pop));   // same artist: a HIT song beats its namesake album (Bohemian Rhapsody)
+  if (q.length >= 3 && bs >= 0.92 && bs >= as && !bigArtist && albumWins) return { mode: 'album', A, B, S };
+  // The most played song CLOSE to the query, typos allowed. It takes over from an exact
+  // title match it hugely out-plays ("bohemian rapsody" → Queen, not a soundalike spelled that way).
+  const F = q.length >= 6 ? c.songs.filter(x => x.s >= 0.36 && !x.tag).sort((x, y) => y.pop * (0.3 + 0.7 * y.s) - x.pop * (0.3 + 0.7 * x.s))[0] : null;
+  if (q.length >= 3 && ss >= 0.92 && ss >= as && !bigArtist) return { mode: 'song', A, B, S: (F && F.pop >= S.pop + 0.35) ? F : S };
+  // A misspelt title ("blindng lights"): that song beats a small artist the typo also hits.
+  if (F && ss < 0.92 && F.pop >= 0.4 && (!A || A.pop + 0.2 < F.pop) && F.s >= as - 0.05) return { mode: 'song', A, B, S: F };
+  if (q.length >= 3 && bs >= 0.92 && bs >= as && !bigArtist) return { mode: 'album', A, B, S };
+  return { mode: 'artist', A, B, S };
+}
+
+// The artist row for a song / album hit, even when the query never named them.
+function sdsAmArtistFor(c, name, dzArtist) {
+  const hit = c.artists.find(a => sdsNorm(a.name) === sdsNorm(name));
+  if (hit) return hit;
+  const local = buildSearchIndex().artists.find(a => sdsNorm(a.name) === sdsNorm(name));
+  if (local) return { kind: 'artist', name: local.name, image: local.image, count: local.count, pop: 0.5, local: true };
+  if (dzArtist && dzArtist.id) return { kind: 'artist', name, image: dzArtist.picture_xl || dzArtist.picture_big || dzArtist.picture_medium || '', pop: 0.5, _dzArtist: { id: dzArtist.id, name } };
+  return null;
+}
+function sdsAmBuild(q, c, versions) {
+  const it = sdsAmIntent(q, c);
+  const byPop = (x, y) => y.pop - x.pop;   // global popularity only (no shelf bonus)
+  const byScore = (x, y) => (y.s - x.s) || byPop(x, y);
+  const same = (a, b) => sdsNorm(a) === sdsNorm(b);
+  const top = [], more = [];
+  const seen = new Set();
+  const add = (list, x) => { if (!x) return; const k = x.kind + '|' + sdsNorm(x.artist || x.name) + '|' + sdsNorm(x.album || x.title || ''); if (seen.has(k)) return; seen.add(k); list.push(x); };
+
+  if (it.mode === 'song') {
+    const S = it.S, nt = S.nt;
+    // Every version of the song: this query's tracks + the track:"title" sweep.
+    const pool = c.songs.concat((versions || []).filter(v => !c.songs.some(x => same(x.artist, v.artist) && same(x.title, v.title))));
+    const group = pool.filter(x => x.nt === nt);
+    // The headline is the most played STUDIO version among the best-matching artist.
+    const lead = group.filter(x => !x.tag || x.tag === 'Remastered').sort(byPop)[0] || S;
+    const prefer = group.filter(x => same(x.artist, S.artist) && (!x.tag || x.tag === 'Remastered')).sort(byPop)[0];
+    const head = (S.s >= 0.95 && prefer) ? prefer : (sdsNorm(q).includes(sdsNorm(S.artist)) ? (prefer || S) : lead);
+    add(top, head);
+    group.filter(x => x !== head).sort(byPop).slice(0, 12).forEach(x => {
+      x.vlabel = same(x.artist, head.artist) ? (x.tag ? x.tag + ' version' : 'Another version') : 'Cover';
+      add(more, x);
+    });
+    const alb = c.albums.find(a => same(a.album, head.album) && same(a.artist, head.artist));
+    add(top, alb || { kind: 'album', album: head.album, artist: head.artist, image: head.image, ref: head.ref, dz: head.dzT && Object.assign({ artist: head.dzT.artist }, head.dzT.album), pop: 0.5 });
+    add(top, sdsAmArtistFor(c, head.artist, head.dzT && head.dzT.artist));
+    c.songs.filter(x => x.nt !== nt && x.s >= 0.45).sort(byScore).slice(0, 4).forEach(x => add(top, x));
+    return { mode: 'song', top, more };
+  }
+  if (it.mode === 'album') {
+    const B = it.B;
+    add(top, B);
+    c.albums.filter(a => a !== B && a.s >= 0.86 && !a.single).sort(byScore).slice(0, 2).forEach(a => add(top, a));
+    add(top, sdsAmArtistFor(c, B.artist, B.dz && B.dz.artist));
+    c.songs.filter(x => same(x.album, B.album) && same(x.artist, B.artist)).sort(byPop).slice(0, 5).forEach(x => add(top, x));
+    c.songs.filter(x => x.s >= 0.5).sort(byScore).slice(0, 4).forEach(x => add(top, x));
+    return { mode: 'album', top, more };
+  }
+  // ARTIST: artist → their albums → their songs → whatever else the letters match.
+  const arts = c.artists.filter(a => a.s >= 0.36).sort((x, y) => y.pop * (0.3 + 0.7 * y.s) - x.pop * (0.3 + 0.7 * x.s));
+  const lead = arts[0];
+  if (lead) {
+    add(top, lead);
+    if (arts[1] && arts[1].s >= lead.s - 0.1 && arts[1].pop >= 0.35) add(top, arts[1]);
+    c.albums.filter(a => same(a.artist, lead.name)).sort((x, y) => (!!x.single - !!y.single) || ((y.s >= 0.92) - (x.s >= 0.92)) || byPop(x, y)).slice(0, 4).forEach(a => add(top, a));
+    c.songs.filter(x => same(x.artist, lead.name) && !x.tag).sort(byPop).slice(0, 5).forEach(x => add(top, x));
+  }
+  c.albums.filter(a => a.s >= 0.45 && !a.single).sort(byScore).slice(0, 4).forEach(a => add(top, a));
+  c.songs.filter(x => x.s >= 0.45).sort(byScore).slice(0, 5).forEach(x => add(top, x));
+  if (!lead) arts.slice(0, 2).forEach(a => add(top, a));
+  return { mode: 'artist', top, more, lead };
+}
+
+function sdsAmGuess(d) {
+  const top = [];
+  const art = (d.artists || []).slice(0, 12).sort((x, y) => (y.nb_fan || 0) - (x.nb_fan || 0))[0];
+  if (art) top.push({ kind: 'artist', name: art.name, image: art.picture_xl || art.picture_big || art.picture_medium || '', pop: 1, dzId: art.id, _dzArtist: { id: art.id, name: art.name } });
+  (d.tracks || []).slice(0, 12).sort((x, y) => (y.rank || 0) - (x.rank || 0)).slice(0, 5).forEach(t => {
+    if (!t || !t.artist || !t.album) return;
+    top.push({ kind: 'song', title: t.title, artist: t.artist.name, album: t.album.title, image: t.album.cover_xl || t.album.cover_big || '', pop: 0, dzT: t, nt: sdsNorm(t.title_short || t.title) });
+  });
+  (d.albums || []).filter(a => a && a.artist && a.record_type === 'album').slice(0, 2).forEach(a => {
+    top.push({ kind: 'album', album: a.title, artist: a.artist.name, image: a.cover_xl || a.cover_big || '', pop: 0, dz: a });
+  });
+  const dym = art ? art.name : (top[0] ? (top[0].title || top[0].album) : '');
+  return { mode: 'guess', top, more: [], dym };
+}
+function sdsAmPaint(ov, q, res) {
+  const resEl = ov.querySelector('.sds-results'), sugEl = ov.querySelector('.sds-suggest');
+  const last = { artists: [], albums: [], songs: [] };
+  const hiQ = String(ov.querySelector('.sds-input').value || '').trim().toLowerCase();
+  const row = x => {
+    if (x.kind === 'artist') {
+      const i = last.artists.push({ name: x.name, image: x.image, count: x.count, _dzArtist: x.local ? null : x._dzArtist }) - 1;
+      return `<button class="sds-row sds-am-row" data-type="artist" data-i="${i}">
+        <span class="sds-thumb sds-thumb--round" style="background-image:url('${sdsSmall(x.image)}')"></span>
+        <span class="sds-row-main"><span class="sds-row-t">${_sdsHi(x.name, hiQ)}</span></span>
+        <span class="sds-am-kind">Artist</span></button>`;
+    }
+    const ref = x.ref || (x.kind === 'album' ? (x.dz ? dzRecord(x.dz, x.dz.artist) : null) : (x.dzT ? dzRecord(x.dzT.album, x.dzT.artist) : null));
+    if (!ref) return '';
+    if (x.kind === 'album') {
+      const i = last.albums.push({ album: x.album, artist: x.artist, image: x.image, year: x.year || ref.year, ref }) - 1;
+      return `<button class="sds-row sds-am-row" data-type="album" data-i="${i}">
+        <span class="sds-thumb" style="background-image:url('${sdsSmall(x.image)}')"></span>
+        <span class="sds-row-main"><span class="sds-row-t">${_sdsHi(x.album, hiQ)}</span><span class="sds-row-s sds-am-who">${_sdsEsc(x.artist)}</span></span>
+        <span class="sds-am-kind">${x.single ? 'Single' : 'Album'}</span></button>`;
+    }
+    const i = last.songs.push({ title: x.title, album: x.album, artist: x.artist, image: x.image, ref }) - 1;
+    // Left: song over "album / artist" (album grey, artist brighter). Right: what it is.
+    const sub = `${x.album ? `<span class="sds-am-alb">${_sdsEsc(x.album)}</span> / ` : ''}<span class="sds-am-who">${_sdsEsc(x.artist)}</span>`;
+    const kind = x.vlabel ? (x.vlabel === 'Cover' ? 'Cover' : x.vlabel.replace(/ version$/, '')) : 'Song';
+    return `<button class="sds-row sds-am-row" data-type="song" data-i="${i}">
+      <span class="sds-thumb" style="background-image:url('${sdsSmall(x.image)}')"></span>
+      <span class="sds-row-main"><span class="sds-row-t">${_sdsHi(x.title, hiQ)}</span><span class="sds-row-s">${sub}</span></span>
+      <span class="sds-am-kind">${kind}</span></button>`;
+  };
+  // Text suggestions (Apple's magnifier rows): completions of what you typed, up to 3.
+  const sug = [], seenS = new Set([sdsNorm(hiQ)]);
+  res.top.concat(res.more).forEach(x => {
+    const n = x.kind === 'artist' ? x.name : x.kind === 'album' ? x.album : x.title;
+    const k = sdsNorm(n);
+    if (sug.length >= 3 || seenS.has(k) || !k.startsWith(sdsNorm(hiQ))) return;
+    seenS.add(k); sug.push(n);
+  });
+  sugEl.innerHTML = sug.map(n => `
+    <button class="sds-sug" data-pick="${_sdsEsc(n).replace(/"/g, '&quot;')}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <span class="sds-sug-t">${_sdsHi(n, hiQ)}</span>
+    </button>`).join('');
+  const topRows = res.top.map(row).join('');
+  const moreRows = res.more.map(row).join('');
+  if (res.dym) sugEl.innerHTML = '';
+  const dym = res.dym ? `<div class="sds-dym">Did you mean <button type="button" class="sds-dym-b" data-pick="${_sdsEsc(res.dym).replace(/"/g, '&quot;')}">${_sdsEsc(res.dym)}</button>?</div>` : '';
+  resEl.innerHTML = (topRows || moreRows)
+    ? dym + `<div class="sds-sec sds-am"><div class="sds-sec-hd">${res.dym ? 'Closest results' : 'Top Results'}</div>${topRows}</div>` +
+      (moreRows ? `<div class="sds-sec sds-am"><div class="sds-sec-hd">Other versions &amp; covers</div>${moreRows}</div>` : '')
+    : (ov._amPending ? '' : `<div class="sds-empty">No results for &ldquo;${_sdsEsc(hiQ)}&rdquo;<br>Check the spelling, or try fewer words.</div>`);
+  ov._last = last;
+}
+
+function sdsAm(qRaw, ov) {
+  const q = sdsNorm(qRaw);
+  if (!q) return;
+  const key = q;
+  const draw = () => {
+    const inp = ov.querySelector('.sds-input');
+    if (!inp || sdsNorm(inp.value) !== key || ov._mode === 'review') return;
+    const remote = SDS_AM.cache.get(key);
+    let c = sdsAmCandidates(q, remote && remote.data);
+    let res = sdsAmBuild(q, c, null);
+    /* THE LEAD ARTIST'S OWN WORK. Deezer's album / track search only returns
+       things whose TITLES match, so "xcx" finds Charli xcx but none of her
+       records. Once an artist leads, their top tracks + albums are fetched
+       (artist/<id>/top, /albums; cached per artist) and merged in, so the list
+       reads artist → their albums → their songs, as on Apple Music. */
+    const lead = res.mode === 'artist' && res.lead && res.lead.dzId;
+    if (lead && remote && remote.data) {
+      const ex = SDS_AM.art.get(lead);
+      if (ex && ex.data) {
+        c = sdsAmCandidates(q, { artists: remote.data.artists, albums: remote.data.albums.concat(ex.data.albums), tracks: remote.data.tracks.concat(ex.data.tracks) });
+        res = sdsAmBuild(q, c, null);
+      } else if (!ex) {
+        const entry = { data: null };
+        SDS_AM.art.set(lead, entry);
+        const who = { id: lead, name: res.lead.name };
+        Promise.all([dz('artist/' + lead + '/top?limit=6'), dz('artist/' + lead + '/albums?limit=30')]).then(([tp, al]) => {
+          const raw = ((al || {}).data || []);
+          const good = typeof dzGoodAlbum === 'function' ? raw.filter(dzGoodAlbum) : raw;
+          entry.data = {
+            tracks: ((tp || {}).data || []),
+            albums: (good.length ? good : raw).filter(a => a.record_type === 'album' || !a.record_type)
+              .sort((x, y) => (y.fans || 0) - (x.fans || 0)).slice(0, 8).map(a => Object.assign({ artist: who }, a)),
+          };
+          draw();
+        }, () => { entry.data = { tracks: [], albums: [] }; });
+      }
+    }
+    /* NOTHING MATCHED → GUESS (Eric 11-18: "when nothing is found it should try
+       and give u suggestions on what it thinks you wanted"). Deezer searches
+       loosely, so its raw answer is the best guess: its most-followed artist
+       and most-played tracks, under "Did you mean …?". If Deezer has nothing
+       either, it is asked again with the query cut to its first ~60%. */
+    let waiting = false;
+    if (remote && remote.data && !res.top.length && !res.more.length) {
+      let src = remote.data;
+      const none = d => !d || (!d.artists.length && !d.albums.length && !d.tracks.length);
+      if (none(src) && q.length >= 4) {
+        const lq = q.slice(0, Math.max(3, Math.ceil(q.length * 0.6))).trim();
+        const le = SDS_AM.cache.get('~' + lq);
+        if (le && le.data) src = le.data;
+        else if (!le) {
+          const entry = { data: null };
+          SDS_AM.cache.set('~' + lq, entry);
+          const e = encodeURIComponent(lq);
+          Promise.all([dz('search/artist?limit=25&q=' + e), dz('search/album?limit=10&q=' + e), dz('search/track?limit=15&q=' + e)])
+            .then(([ar, al, tr]) => { entry.data = { artists: (ar || {}).data || [], albums: (al || {}).data || [], tracks: (tr || {}).data || [] }; draw(); },
+                  () => { entry.data = { artists: [], albums: [], tracks: [] }; draw(); });
+          waiting = true;
+        }
+      }
+      if (!none(src)) res = sdsAmGuess(src);
+    }
+    if (res.mode === 'song') {
+      const nt = res.top[0] && res.top[0].nt;
+      const vs = nt && SDS_AM.ver.get(nt);
+      if (vs && vs.data) res = sdsAmBuild(q, c, vs.data);
+      else if (nt && !vs) {
+        // One more call for the song's other versions: track:"title".
+        const title = res.top[0].dzT ? (res.top[0].dzT.title_short || res.top[0].title) : res.top[0].title;
+        const entry = { data: null };
+        SDS_AM.ver.set(nt, entry);
+        dz('search/track?limit=40&q=' + encodeURIComponent('track:"' + title + '"')).then(r => {
+          entry.data = (((r || {}).data) || []).filter(t => t && t.artist && t.album && sdsNorm(t.title_short || t.title) === nt)
+            .map(t => ({ kind: 'song', title: t.title, artist: t.artist.name, album: t.album.title, image: t.album.cover_xl || t.album.cover_big || '',
+              s: 0.9, sa: 0, pop: Math.min(1, (t.rank || 0) / 9e5), dzT: t, nt, tag: sdsVersionTag(t.title) }));
+          draw();
+        }, () => { entry.data = []; });
+      }
+    }
+    ov._amPending = !remote || !remote.data || waiting;
+    sdsAmPaint(ov, q, res);
+  };
+  draw();
+  if (SDS_AM.cache.has(key) || q.length < 2) return;
+  clearTimeout(SDS_AM.t);
+  SDS_AM.t = setTimeout(() => {
+    const e = encodeURIComponent(qRaw.trim());
+    const entry = { data: null };
+    SDS_AM.cache.set(key, entry);
+    Promise.all([
+      dz('search/artist?limit=50&q=' + e),   // Deezer doesn't sort by fame (Taylor Swift is #13 for "taylor"), so take 50 and rank them here
+      dz('search/album?limit=15&q=' + e),
+      dz('search/track?limit=25&q=' + e),
+    ]).then(([ar, al, tr]) => {
+      entry.data = { artists: (ar || {}).data || [], albums: (al || {}).data || [], tracks: (tr || {}).data || [] };
+      draw();
+    }, () => { SDS_AM.cache.delete(key); ov._amPending = false; draw(); });
+  }, 220);
+}

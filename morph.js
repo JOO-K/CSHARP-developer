@@ -8,68 +8,104 @@
    A face or a name → the profile card's picture. Back from the album page
    → the cover shrinks to where it came from.
 
-   HOW: `sdMorph(src, findDest, go)` remembers the source's box and image,
-   runs the navigation (`go`), waits for the destination element to exist
-   with a size (polled for up to 700ms — a cross-screen navigate renders in
-   a frame or two), hides it, glides a body-level fixed clone from box to
-   box (left/top/width/height/border-radius, 380ms), then reveals the
-   destination and drops the clone. Boxes are `getBoundingClientRect`s, so
-   the viewer's zoom and the phone's scale are already in them, and the
-   clone lives on <body>, outside both.
+   HOW: `sdMorph(src, findDest, go)` lifts a body-level fixed clone of the
+   source AT ONCE (so a slow page still answers the tap), runs the navigation
+   (`go`), waits for the destination element to exist with a size (polled for
+   up to 1.5s), hides it, glides the clone from box to box (left/top/width/
+   height/border-radius, 380ms), then reveals the destination and drops the
+   clone. A destination that never shows: the clone fades where it is.
+   Boxes are `getBoundingClientRect`s, so the viewer's zoom and the phone's
+   scale are already in them, and the clone lives on <body>, outside both.
+
+   csharpdeveloper (Eric 2026-11-18: "it lags when i go to an album and it
+   doesnt do the transition … a flash of the previous album"):
+     · The clone wears the SOURCE's picture. It used to take the destination's,
+       which on the album page is still the LAST album until the new cover
+       loads — that was the flash. `destImage: true` (a friend's profile face)
+       still asks for the destination's.
+     · Lift first, then wait 1.5s (was: wait, then nothing after 700ms).
+     · When it lands on an empty box (cover still downloading) the box gets the
+       clone's picture, so nothing blinks out.
+     · AUTO: any openAlbumPage / openArtistPageFor that follows a tap on a
+       cover (search rows, Browse rails, More by, Swipe / Comments / Player's
+       Go to album, …) glides from that cover — `lastTap` remembers the picture
+       under the last pointerdown for 800ms. The wired call sites (deck, wall,
+       feed record, Back) already set `_sdMorph` and are left alone.
+
    ⚠ The album page's own cover transitions (`.s-home-v3--review .v3-album`
    slides left/top/width) would make the destination box a moving target:
    `enterAlbumPageState` puts `.sd-morphing` on the shell while a morph is
    in flight and app.css switches those transitions off under it.
    Loads after app.js; app.js only calls in through `typeof sdMorph`.
-   Reduced motion, a missing source or a destination that never shows up:
-   the navigation simply happens.
+   Reduced motion, a missing source: the navigation simply happens.
    ============================================================ */
 (function () {
-  const DUR = 380, EASE = 'cubic-bezier(.2, .8, .2, 1)';
+  const DUR = 380, EASE = 'cubic-bezier(.2, .8, .2, 1)', WAIT = 1500;
   let live = null;
   const rect = el => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
   const bgOf = el => { if (!el) return ''; const b = getComputedStyle(el).backgroundImage; return b && b !== 'none' ? b : ''; };
+  const imgSrc = el => el && el.tagName === 'IMG' && el.currentSrc ? `url("${el.currentSrc}")` : '';
   // The image on the element, or on the first child that carries one (the deck's face is a layer inside its circle).
-  const imgOf = el => bgOf(el) || bgOf(el.querySelector && el.querySelector('[style*="background-image"]'));
+  const imgOf = el => imgSrc(el) || bgOf(el) || bgOf(el.querySelector && el.querySelector('[style*="background-image"]'));
+  const shown = el => { if (!el || !el.isConnected) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
 
   window.sdMorph = function (src, findDest, go, opts) {
     opts = opts || {};
-    if (!src || !src.getBoundingClientRect || matchMedia('(prefers-reduced-motion: reduce)').matches) { go(); return; }
-    const from = rect(src);
+    // `src` may be a SNAPSHOT ({ box, img, r }) of something already gone — Swipe closes its feed before the album opens.
+    const snap = src && src.box;
+    if (!src || (!snap && !src.getBoundingClientRect) || matchMedia('(prefers-reduced-motion: reduce)').matches
+        || document.documentElement.classList.contains('sd-reduce-motion')) { go(); return; }
+    const from = snap ? src.box : rect(src);
     if (!from.w || !from.h) { go(); return; }
-    const img = imgOf(src), r0 = getComputedStyle(src).borderRadius;
+    const img = snap ? src.img : imgOf(src), r0 = snap ? src.r : getComputedStyle(src).borderRadius;
     if (live) { live.remove(); live = null; }
+
+    // Lift at once: the tap answers even if the page takes a moment to build.
+    const ghost = document.createElement('div');
+    ghost.className = 'sd-morph';
+    ghost.style.cssText = `position:fixed;left:${from.x}px;top:${from.y}px;width:${from.w}px;height:${from.h}px;border-radius:${r0};`
+      + `background:${img ? img + ' center / cover no-repeat' : '#222'};z-index:100000;pointer-events:none;`
+      + `box-shadow:0 12px 40px rgba(0,0,0,.45);opacity:1;`
+      + `transition:left ${DUR}ms ${EASE},top ${DUR}ms ${EASE},width ${DUR}ms ${EASE},height ${DUR}ms ${EASE},border-radius ${DUR}ms ${EASE},opacity .2s ease`;
+    document.body.appendChild(ghost); live = ghost;
+
     window._sdMorph = true;
-    try { go(); } finally { setTimeout(() => { window._sdMorph = false; }, 800); }
+    try { go(); } finally { setTimeout(() => { window._sdMorph = false; }, 900); }
     const t0 = performance.now();
-    const tick = () => {
+    const fly = () => {
+      if (live !== ghost) return;                      // a newer morph took over
       const dest = findDest();
-      if (!dest || !dest.getBoundingClientRect().width) { if (performance.now() - t0 < 700) requestAnimationFrame(tick); return; }
+      if (!shown(dest)) {
+        if (performance.now() - t0 < WAIT) { requestAnimationFrame(fly); return; }
+        ghost.style.opacity = '0';                     // never showed: fade where it is
+        setTimeout(() => { ghost.remove(); if (live === ghost) live = null; }, 220);
+        return;
+      }
       const to = rect(dest);
-      const image = (opts.destImage !== false && bgOf(dest)) || img;
-      const ghost = document.createElement('div');
-      ghost.className = 'sd-morph';
-      ghost.style.cssText = `position:fixed;left:${from.x}px;top:${from.y}px;width:${from.w}px;height:${from.h}px;border-radius:${r0};`
-        + `background:${image ? image + ' center / cover no-repeat' : '#222'};z-index:100000;pointer-events:none;`
-        + `box-shadow:0 12px 40px rgba(0,0,0,.45);`
-        + `transition:left ${DUR}ms ${EASE},top ${DUR}ms ${EASE},width ${DUR}ms ${EASE},height ${DUR}ms ${EASE},border-radius ${DUR}ms ${EASE}`;
-      document.body.appendChild(ghost); live = ghost;
+      if (opts.destImage === true && bgOf(dest)) ghost.style.backgroundImage = bgOf(dest);
       const r1 = getComputedStyle(dest).borderRadius;
       dest.style.visibility = 'hidden';
       void ghost.offsetWidth;
       ghost.style.left = to.x + 'px'; ghost.style.top = to.y + 'px'; ghost.style.width = to.w + 'px'; ghost.style.height = to.h + 'px'; ghost.style.borderRadius = r1;
-      setTimeout(() => { dest.style.visibility = ''; ghost.remove(); if (live === ghost) live = null; }, DUR + 30);
+      setTimeout(() => {
+        // Landed on a box whose own picture is still downloading: lend it the clone's.
+        if (!bgOf(dest) && img && dest.tagName !== 'IMG') dest.style.backgroundImage = img;
+        dest.style.visibility = '';
+        ghost.remove(); if (live === ghost) live = null;
+      }, DUR + 30);
     };
-    requestAnimationFrame(tick);
+    // Rather a timer than rAF for the first look: rAF never fires in a background tab.
+    setTimeout(fly, 0);
   };
 
-  // The album page's cover, on whichever shell is showing it.
-  window.sdFindAlbumCover = () => document.querySelector('#phone-container .s-home-v3--album .v3-album, #mobile-content .s-home-v3--album .v3-album');
+  /* The album page's cover, on whichever shell is SHOWING it (the hidden theme
+     twin is filled a beat later, and the first match in the DOM may be it). */
+  window.sdFindAlbumCover = () => [...document.querySelectorAll('#phone-container .s-home-v3--album .v3-album, #mobile-content .s-home-v3--album .v3-album')].find(shown) || null;
   // The profile card's picture.
-  window.sdFindProfilePic = () => document.querySelector('#phone-container .s-prof2 .prof-pic, #mobile-content .s-prof2 .prof-pic');
+  window.sdFindProfilePic = () => [...document.querySelectorAll('#phone-container .s-prof2 .prof-pic, #mobile-content .s-prof2 .prof-pic')].find(shown) || null;
   // Where a cover came from, for Back: the deck's front card on a home shell, or the wall tile naming the album.
   window.sdFindCoverHome = album => {
-    const home = document.querySelector('#phone-container .s-home-v3:not(.s-home-v3--review), #mobile-content .s-home-v3:not(.s-home-v3--review)');
+    const home = [...document.querySelectorAll('#phone-container .s-home-v3:not(.s-home-v3--review), #mobile-content .s-home-v3:not(.s-home-v3--review)')].find(shown);
     const card = home && home.querySelector(`.v3-fb-card[data-i="${home._fbCur || 0}"]`);
     if (card) return card;
     if (!album) return null;
@@ -77,4 +113,50 @@
     const t = tiles.find(c => c.dataset.alb === album.album && (!c.dataset.art || c.dataset.art === album.artist));
     return t ? (t.querySelector('.wall2-art') || t) : null;
   };
+
+  /* AUTO MORPH. The picture under the last tap: the element itself, a parent
+     that carries one, or the art inside the card that was tapped (a search row,
+     a rail card — the tap often lands on the text beside the cover). */
+  let lastTap = null;
+  const PIC = '[style*="background-image"], img';
+  // Swipe / Comments / Player: a tap on the album or artist text glides from the spinning CD.
+  const FEED_CD = '.ds-fixcd, .qs-cd, .cp-deck .cp-cd-disc';
+  const pictureFor = t => {
+    const feed = t.closest('.ds-root, .qs-root, .cp-root');
+    if (feed && !t.closest('.ds-rsheet, .ds-gsheet, .wg-sheet')) {
+      const cd = [...feed.querySelectorAll(FEED_CD)].find(shown);
+      if (cd && !t.closest('[style*="background-image"]')) return cd;
+    }
+    for (let el = t, k = 0; el && el !== document.body && k < 5; el = el.parentElement, k++) {
+      if (el.matches && el.matches(PIC) && el.getBoundingClientRect().width >= 28) return el;
+      const inner = el.querySelector && [...el.querySelectorAll(PIC)].find(x => x.getBoundingClientRect().width >= 28);
+      if (inner) return inner;
+    }
+    return null;
+  };
+  document.addEventListener('pointerdown', e => {
+    const t = e.target;
+    if (!t || !t.closest || !t.closest('#phone-container, #mobile-content')) return;
+    const el = pictureFor(t);
+    // Snapshot now: by the time the album opens, the tapped thing may be gone.
+    lastTap = el ? { el, at: performance.now(), box: rect(el), img: imgOf(el), r: getComputedStyle(el).borderRadius } : null;
+  }, true);
+  const wrap = name => {
+    const f = window[name];
+    if (typeof f !== 'function' || f._sdAuto) return;
+    const w = function () {
+      const tap = lastTap;
+      if (!window._sdMorph && tap && performance.now() - tap.at < 800 && tap.box.w) {
+        lastTap = null;
+        let out;
+        window.sdMorph(shown(tap.el) ? tap.el : tap, window.sdFindAlbumCover, () => { out = f.apply(this, arguments); });
+        return out;
+      }
+      return f.apply(this, arguments);
+    };
+    w._sdAuto = true;
+    window[name] = w;
+  };
+  wrap('openAlbumPage');
+  wrap('openArtistPageFor');
 })();

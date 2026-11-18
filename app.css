@@ -367,6 +367,43 @@
   mask: url('images/spindeck-wordmark.png') center / contain no-repeat;
 }
 
+/* LOGIN BACKGROUND + BELT LOGO (csharpdeveloper, 2026-11-18). .auth-bg is
+   filled with drifting blurred covers by sdAuthBg (app.js); its ::after lays
+   the screen's own colour over them so the form stays readable — lighter up
+   top where the logo is, heavier under the fields. */
+.s-auth { overflow: hidden; isolation: isolate; }
+.auth-bg {
+  position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
+  background: var(--bg);
+}
+.auth-bg-l {
+  position: absolute; left: -25%; top: 15%; width: 150%; height: 70%;
+  object-fit: cover; max-width: none;
+  border-radius: 50%;
+  filter: blur(54px) saturate(1.5);
+  opacity: 0; will-change: transform, opacity;
+}
+.auth-bg::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--bg) 18%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 38%, transparent) 40%,
+    color-mix(in srgb, var(--bg) 62%, transparent) 100%);
+}
+.auth-hero, .auth-body { position: relative; z-index: 1; }
+.auth-hero { padding-top: 64px; gap: 18px; }
+.auth-belt { width: 96px; height: auto; overflow: visible; display: block; }
+.auth-belt-p {
+  fill: none; stroke: var(--text); stroke-width: 30; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: auth-belt-draw .9s cubic-bezier(.45,0,.25,1) var(--d, 0s) forwards;
+}
+@keyframes auth-belt-draw { to { stroke-dashoffset: 0; } }
+.s-auth .auth-appname { width: 168px; height: 24px; opacity: 0; animation: auth-word-in .55s ease-out 1s forwards; }
+@keyframes auth-word-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+html.sd-reduce-motion .auth-belt-p { animation: none; stroke-dashoffset: 0; }
+html.sd-reduce-motion .s-auth .auth-appname { animation: none; opacity: 1; }
+
 .auth-body {
   flex: 1;
   padding: 8px 24px 32px;
@@ -14404,3 +14441,44 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
 .s-home-v3 .sd-log-opt[data-k="fav"].on .sd-log-opt-lbl,
 #sd-log .sd-log-opt[data-k="fav"].on .sd-log-opt-ico,
 #sd-log .sd-log-opt[data-k="fav"].on .sd-log-opt-lbl { color: #ff5c8a; }
+
+/* LOGIN, GUEST ONLY (csharpdeveloper, Eric 2026-11-18). The form is gone from
+   authHtml; the guest button sits at the foot of the screen over the moving
+   covers, with the recording notice under it. */
+.s-auth .auth-body--guest { justify-content: flex-end; padding: 0 28px 44px; }
+.s-auth .auth-body--guest .auth-guest { width: 100%; }
+.s-auth .auth-body--guest .auth-rec-note { color: var(--text2); }
+.s-auth .auth-hero { flex: 1; justify-content: center; padding: 0; }
+
+/* SEARCH, APPLE MUSIC STYLE (csharpdeveloper, 2026-11-18; sdsAm in app.js).
+   One ranked list: bigger art, title over "Artist" / "Album · X" / "Song · X",
+   a chevron on artists and albums, hairlines between rows like Apple's. */
+.sds-am .sds-row.sds-am-row { padding: 8px 16px; gap: 12px; position: relative; }
+.sds-am .sds-am-row .sds-thumb { width: 52px; height: 52px; border-radius: 6px; flex-shrink: 0; }
+.sds-am .sds-am-row .sds-thumb--round { border-radius: 50%; }
+.sds-am .sds-am-row .sds-row-t { font-size: 15px; font-weight: 500; }
+.sds-am .sds-am-row .sds-row-s { font-size: 12.5px; }
+.sds-am .sds-am-row + .sds-am-row::before {
+  content: ''; position: absolute; top: 0; left: 80px; right: 0; height: 1px; background: rgba(255,255,255,0.07);
+}
+.sds-overlay--light .sds-am .sds-am-row + .sds-am-row::before { background: rgba(26,18,8,0.08); }
+.sds-am-go { width: 16px; height: 16px; flex-shrink: 0; opacity: .35; }
+.sds-am .sds-sec-hd { padding-left: 16px; }
+/* Type on the right (Artist / Album / Single / Song / Cover / Live …), the info
+   on the left: albums = artist; songs = album (grey) / artist (Eric, 11-18). */
+.sds-am-kind {
+  flex-shrink: 0; margin-left: 8px;
+  font-size: 11px; font-weight: 600; letter-spacing: .2px;
+  color: rgba(232,226,214,0.45);
+}
+.sds-am .sds-am-row .sds-row-s { color: rgba(232,226,214,0.4); }
+.sds-am .sds-am-row .sds-am-who { color: rgba(232,226,214,0.72); }
+.sds-am .sds-am-row .sds-am-alb { color: rgba(232,226,214,0.4); }
+.sds-overlay--light .sds-am-kind { color: rgba(26,18,8,0.45); }
+.sds-overlay--light .sds-am .sds-am-row .sds-row-s,
+.sds-overlay--light .sds-am .sds-am-row .sds-am-alb { color: rgba(26,18,8,0.42); }
+.sds-overlay--light .sds-am .sds-am-row .sds-am-who { color: rgba(26,18,8,0.72); }
+/* "Did you mean …?" over the closest results when nothing matched (sdsAmGuess). */
+.sds-dym { padding: 14px 16px 2px; font-size: 14px; color: rgba(232,226,214,0.6); }
+.sds-dym-b { border: none; background: none; padding: 0; font: inherit; font-weight: 700; color: var(--accent, #e8a83c); cursor: pointer; }
+.sds-overlay--light .sds-dym { color: rgba(26,18,8,0.6); }

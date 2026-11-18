@@ -9,6 +9,18 @@
 > the top of index.html) so this site never mixes with the others on
 > joo-k.github.io. flow/, flow.html, flow-capture/, snap.js are local-only
 > (gitignored). Everything below is csharpuser's notes, still accurate.
+>
+> **PAGE LOADS (2026-11-18)** — album / artist pages open without the lag or the
+> flash of the previous album (PAGE LOADS comment above `enterAlbumPageState`):
+> from another tab `sdShellPage` enters the page in the same tick as
+> `navigate('home')` and `populateHomeData` builds the home feed 650ms later
+> (`_sdPage`); `sdEachShell` fills the visible shell first; `sdClearCover` drops
+> the old cover; `applyAlbumColorsUrl` only applies the newest request
+> (`_colorWant`); the deck (`fbGo`) holds its album in `_fbFront` while a page is
+> up. morph.js: the glide wears the TAPPED picture, lifts at once, waits 1.5s,
+> and AUTO-glides any `openAlbumPage` / `openArtistPageFor` that follows a tap on
+> a cover (`lastTap` snapshot; Swipe / Comments / Player glide from their CD).
+> Headless check: puppeteer-core in the scratchpad (`pt/run.js`, `pt/back.js`).
 
 > ## ⚠️ THIS IS **0.20** — THE ROOT OF THE REPO, ON `main`, LIVE (2026-10-13 → )
 > Eric: "lets try updating this version to the live and call it .20". 0.14b

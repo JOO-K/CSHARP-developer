@@ -977,30 +977,25 @@ function sdTheme(light) { return light ? 'sd-theme-light' : 'sd-theme-dark'; }
 function authHtml(light) {
   return `
       <div class="app-screen s-auth ${sdTheme(light)}">
+        <!-- csharpdeveloper (Eric, 2026-11-18): blurred album covers drifting
+             and dissolving into each other behind the login, forever
+             (sdAuthBg, app.js — it fills .auth-bg when the screen mounts). -->
+        <div class="auth-bg" aria-hidden="true"></div>
         <div class="auth-hero">
-          <!-- The turntable icon is 2-tone (black body, light centre dot), so it
-               ships as real black/white PNGs rather than a themed CSS mask. -->
-          <img class="auth-logo-mark" src="images/spindeck-icon${light ? '' : '-white'}.png" alt="">
+          <!-- The intro's belt-drive logo (sdIntroHtml), drawn in on mount. -->
+          ${typeof sdAuthLogoHtml === 'function' ? sdAuthLogoHtml() : ''}
           <div class="auth-appname" role="img" aria-label="Spindeck"></div>
         </div>
         <!-- 0.20 (Eric, 2026-10-23): everything but Log in as guest is GREYED
              OUT and disabled — "thats the only one we want them to be using".
              The handlers stay, so taking .auth-off / disabled back off is the
              whole undo. -->
-        <div class="auth-body">
-          <div class="field-group auth-off">
-            <div class="field"><label>Email</label><input type="email" placeholder="you@example.com" disabled></div>
-            <div class="field"><label>Password</label><input type="password" placeholder="••••••••" disabled></div>
-          </div>
-          <button class="btn-primary auth-off" style="margin-top:8px" onclick="obStart()" disabled>Sign In</button>
-          <div class="divider" style="margin:16px 0">or</div>
-          <button class="btn-outline auth-off" onclick="obStart()" disabled>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-            Continue with Google
-          </button>
-          <!-- 0.20 (Eric, 2026-10-23): skip account creation from here. -->
-          <button class="btn-outline auth-guest" style="margin-top:10px" onclick="sdGuestLogin(this)">Log in as guest</button>
-          <button class="link-btn auth-off" style="margin-top:20px" onclick="obStart()" disabled>Don't have an account? <span style="color:var(--accent)">Sign Up</span></button>
+        <!-- csharpdeveloper (Eric, 2026-11-18): GUEST ONLY. The greyed-out
+             email / password / Sign In / Google / Sign Up are taken out of the
+             markup ("make sure the other login info is taken out"); they are in
+             git history (4ee5923) for when accounts come. -->
+        <div class="auth-body auth-body--guest">
+          <button class="btn-primary auth-guest" onclick="sdGuestLogin(this)">Log in as guest</button>
           <!-- The recording notice the name popup used to carry. -->
           <p class="auth-rec-note">Your taps and the screens you visit are recorded (no camera, no mic) so we can see how the app gets used and improve it. By continuing you approve of this recording.</p>
         </div>
