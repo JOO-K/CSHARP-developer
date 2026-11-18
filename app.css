@@ -14585,3 +14585,13 @@ html.sd-reduce-motion .v3-bottom-nav.is-quick .v3-nav-dots i { animation: none; 
 .s-home-v3.s-home-v3--review.s-home-v3--album:not(.s-home-v3--artist) .v3-rev-list { margin-left: 0; margin-right: 0; }
 .s-home-v3.s-home-v3--review.s-home-v3--album.s-home-v3--artist .v3-rev-list { margin-left: 10px; margin-right: 10px; }
 .s-home-v3.s-home-v3--review.s-home-v3--album .v3-rev-list > .v3-rev-card { padding-left: 6px; padding-right: 6px; }
+
+/* Artist page round 3 (Eric 11-18): albums two to a row; Popular songs with no
+   numbers (the head's SONG label sits over the covers); air above the songs
+   when there is no View all button between them and the grid. */
+.s-home-v3--artist .v3-artist-albums .wall2-grid { grid-template-columns: repeat(2, 1fr); gap: 16px 12px; }
+.s-home-v3--artist .v3-artist-albums .wall2-grid + .v3-ap-sec { margin-top: 26px; }
+.v3-aa-all + .v3-ap-sec { margin-top: 6px; }
+.v3-ap-head .v3-song-title { padding-left: 0; }
+.v3-ap-fav { display: inline-flex; vertical-align: -1px; margin-left: 6px; color: #ff5c8a; }
+.v3-ap-fav svg { width: 11px; height: 11px; fill: currentColor; stroke: currentColor; }

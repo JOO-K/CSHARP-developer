@@ -987,7 +987,7 @@ function artistAlbumsFor(a) {
   return out.sort((x, y) => (y.year || 0) - (x.year || 0));
 }
 const AP_ALL = new Set();          // artists whose grid is opened past 6 (View all albums)
-const AP_GRID_MAX = 6;
+const AP_GRID_MAX = 4;   // 2 rows of 2 (Eric 11-18: "2 albums per row … show 4 and the half")
 
 function artistAlbumsHtml(a) {
   const albums = artistAlbumsFor(a);
@@ -997,9 +997,12 @@ function artistAlbumsHtml(a) {
      and maybe we can fade them out below"). The row view stays the full rail. */
   const k = String(a.artist || '').toLowerCase();
   const clamp = !row && !AP_ALL.has(k) && albums.length > AP_GRID_MAX;
-  const shown = clamp ? albums.slice(0, AP_GRID_MAX + 3) : albums;
-  const cells = shown.map(al => `
-      <div class="wall2-cell" ${sdAlbumData(al)} onclick="openAlbumByData(this, event)">
+  const shown = clamp ? albums.slice(0, AP_GRID_MAX + 2) : albums;
+  /* A tile opens THE record it shows (11-18: "clicking on an album in the
+     artist page isnt opening the album"): openAlbumByData looked the title up
+     on the shelf, and the Deezer discography's records aren't on it. */
+  const cells = shown.map((al, k) => `
+      <div class="wall2-cell" ${sdAlbumData(al)} data-k="${k}" onclick="apAlbumOpen(this, event)">
         <div class="wall2-art" style="background-image:url('${al.image}')"></div>
         <div class="wall2-meta"><span class="wall2-album">${al.album}</span><span class="wall2-artist">${al.artist}</span></div>
         <div class="wall2-rating">${halfStars(al.rating, 11)}<span class="wall2-score">${al.rating.toFixed(1)}</span></div>
@@ -1035,6 +1038,15 @@ function apClampGrid(scr) {
   const top = (c.getBoundingClientRect().top - g.getBoundingClientRect().top) / k;
   if (top > 0) g.style.maxHeight = (top + c.offsetHeight * 0.45).toFixed(1) + 'px';
 }
+window.apAlbumOpen = function (el, e) {
+  if (e) e.stopPropagation();
+  const scr = el && el.closest('.s-home-v3');
+  const a = scr && scr._album && artistAlbumsFor(scr._album)[+el.dataset.k];
+  if (!a) return;
+  const art = el.querySelector('.wall2-art') || el;
+  if (typeof sdMorph === 'function') sdMorph(art, sdFindAlbumCover, () => openAlbumPage(a));
+  else openAlbumPage(a);
+};
 window.artistAllAlbums = function (btn) {
   const scr = btn && btn.closest('.s-home-v3');
   const a = scr && (scr._album || window.activeAlbum);
@@ -1100,8 +1112,7 @@ function apPaintSongs(scr, a) {
        sheet (apSongLog), where the like and the thread are. Each row also
        carries its cover small, since the songs come from different records. */
     sec2.querySelector('.v3-ap-songs').innerHTML = `
-      <div class="v3-song-head">
-        <span class="v3-song-num"></span>
+      <div class="v3-song-head v3-ap-head">
         <span class="v3-song-title">Song</span>
         <span class="v3-song-dur">Comments</span>
         <span class="v3-song-rate">Rating</span>
@@ -1112,9 +1123,8 @@ function apPaintSongs(scr, a) {
       const art = String(t.album.cover_small || t.album.cover_medium || '').replace(/'/g, '%27');
       return `
       <button class="v3-song-row v3-ap-row" type="button" data-i="${i}" data-title="${_revAttr(t.title)}" onclick="event.stopPropagation(); apSongLog(this)">
-        <span class="v3-song-num">${songNumHtml(alb, t.title, i)}</span>
         <span class="v3-ap-art" style="background-image:url('${art}')"></span>
-        <span class="v3-song-title v3-ap-main"><span class="v3-ap-t">${_sdsEsc(t.title)}</span><span class="v3-ap-s">${_sdsEsc(albName)}</span></span>
+        <span class="v3-song-title v3-ap-main"><span class="v3-ap-t">${_sdsEsc(t.title)}${songIsFav(alb, t.title) ? `<span class="v3-ap-fav">${typeof RVP_HEART !== 'undefined' ? RVP_HEART : '♥'}</span>` : ''}</span><span class="v3-ap-s">${_sdsEsc(albName)}</span></span>
         <span class="v3-song-dur v3-song-cmt">${CMT_SVG}<span class="v3-song-cmt-n" data-k="${_revAttr(ck)}" data-n="${ct}">${cmtCount(ck, ct) || ''}</span></span>
         ${songRateHtml(alb, { title: t.title, rating: apSongRating(t.title, albName) })}
       </button>`;
