@@ -630,7 +630,31 @@ function captureScreenSnap() {
    sdsOpenResult stashes the overlay's state in `_sdsPending` just before it
    opens the result; whichever snapshot the open takes next carries it, and
    goBack reopens the search on top of the restored view (sdsRestore). */
+/* THE PAGE BEHIND THE FINGER (csharpdeveloper, Eric 2026-11-18: "only 1 page
+   at a time"). Every forward step takes a snapshot for Back (this function);
+   it now also keeps a static COPY of the page being left (sdKeepPage: a deep
+   clone + its scroll positions) — on that snapshot only, older ones drop
+   theirs, so one page is ever held. The edge swipe lays it under the page you
+   are dragging (sdShowPrev), so the page you go back to is there, live, under
+   the finger. Phone build only (#mobile-content). */
+const SD_PREV_SCROLLERS = '.v3-body, .sds-body, .ds-scroll, .qs-scroll, .wall2-scroll, .wb-rail, .v3-aa-row, .v3-feed-items';
+function sdKeepPage() {
+  const host = document.getElementById('mobile-content');
+  if (!host || !host.getBoundingClientRect().width) return null;
+  const scr = [...host.children].filter(e => e.classList && e.classList.contains('app-screen') && !e.classList.contains('fade-exit')).pop();
+  if (!scr) return null;
+  const scrolls = [...scr.querySelectorAll(SD_PREV_SCROLLERS)].map(e => [e.scrollTop, e.scrollLeft]);
+  const node = scr.cloneNode(true);
+  node.removeAttribute('id');
+  node.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));   // no second #sd-search for getElementById to find
+  node.classList.remove('sd-edge-drag', 'fade-enter', 'fade-exit');
+  node.style.transform = ''; node.style.opacity = ''; node.style.transition = '';
+  return { node, scrolls, at: Date.now() };
+}
 function sdsTagSnap(snap) {
+  const kept = window._sdKeep && Date.now() - window._sdKeep.at < 600 ? window._sdKeep : sdKeepPage();
+  window._sdKeep = null;
+  if (kept) { backStack.forEach(x => { if (x._view) delete x._view; }); snap._view = kept; }
   if (window._sdsPending) { snap.search = window._sdsPending; window._sdsPending = null; }
   snap.tab = window.SD_TAB || null;   // the nav bubble's owner, put back by goBack (THE NAV BUBBLE)
   return snap;
@@ -2403,7 +2427,7 @@ window.onLivePill = function (btn) {
     // review state, i.e. the snapshot underneath is a plain screen.
     const top = backStack[backStack.length - 1];
     const cover = scr.querySelector('.v3-album'), album = scr._album;
-    if (cover && typeof sdMorph === 'function' && scr.classList.contains('s-home-v3--album') && !scr.classList.contains('s-home-v3--artist') && (!top || !top.review)) {
+    if (cover && typeof sdMorph === 'function' && !window._sdEdgeBack && scr.classList.contains('s-home-v3--album') && !scr.classList.contains('s-home-v3--artist') && (!top || !top.review)) {
       sdMorph(cover, () => sdFindCoverHome(album), () => goBack(), { destImage: false, lift: false });
     } else goBack();
     return;
@@ -10730,6 +10754,7 @@ function runSearch() {
 // Result tap → browse to it (artist / album page), then close the overlay.
 // Back from a result returns to this search, typed and scrolled as it was.
 function sdsStash(ov) {
+  window._sdKeep = sdKeepPage();
   window._sdsPending = ov ? { q: ov.querySelector('.sds-input').value, cat: ov._cat || 'all',
     scroll: ov.querySelector('.sds-body').scrollTop, prevTab: ov._prevTab || null } : null;
 }
@@ -16315,54 +16340,125 @@ window.addEventListener('resize', () => {
    ⚠ In Safari (not the home-screen app) iOS has its own edge swipe for the
    browser's history; preventDefault on the claimed touch usually wins, but
    the system gesture may still take a swipe that starts right on the bezel. */
+/* The kept page goes inside a SHADOW ROOT: everything in app.js finds screens
+   with document.querySelectorAll ('.s-home-v3', '.v3-album' …), and a plain
+   copy in the page would be found too — Back would fill the copy. A shadow
+   tree is invisible to those queries. Its styles: one constructed sheet from
+   the page's own rules, made once (html.sd-* rules re-pointed at a wrapper
+   that carries <html>'s classes, since <html> is outside the shadow). */
+let SD_PREV_SHEET = null;
+function sdPrevSheet() {
+  if (SD_PREV_SHEET !== null) return SD_PREV_SHEET;
+  try {
+    let css = '';
+    for (const ss of document.styleSheets) {
+      let rules; try { rules = ss.cssRules; } catch (e) { continue; }   // a cross-origin font sheet
+      for (const r of rules) { if (!/^@import/i.test(r.cssText)) css += r.cssText + '\n'; }
+    }
+    css = css.replace(/html\.(sd-[\w-]+)/g, '.sd-prev-root.$1');
+    const sh = new CSSStyleSheet();
+    sh.replaceSync(css);
+    SD_PREV_SHEET = sh;
+  } catch (e) { SD_PREV_SHEET = false; }
+  return SD_PREV_SHEET;
+}
+function sdShowPrev(view, el) {
+  const sheet = sdPrevSheet();
+  if (!sheet || !el || !el.parentElement) return null;
+  const box = document.createElement('div');
+  box.className = 'sd-prev-page';
+  box.style.cssText = `left:${el.offsetLeft}px;top:${el.offsetTop}px;width:${el.offsetWidth}px;height:${el.offsetHeight}px;`;
+  const sr = box.attachShadow({ mode: 'open' });
+  sr.adoptedStyleSheets = [sheet];
+  const wrap = document.createElement('div');
+  wrap.className = 'sd-prev-root ' + document.documentElement.className;
+  wrap.style.cssText = 'width:100%;height:100%;overflow:hidden;';
+  wrap.appendChild(view.node);
+  sr.appendChild(wrap);
+  const dim = document.createElement('div');   // the dimming, inside the shadow (the host's vars inherit in)
+  dim.style.cssText = 'position:absolute;inset:0;background:#000;pointer-events:none;opacity:var(--sd-prev-dim,.45);transition:opacity var(--sd-prev-ms,0ms) ease;';
+  sr.appendChild(dim);
+  el.parentElement.insertBefore(box, el);
+  const tg = [...view.node.querySelectorAll(SD_PREV_SCROLLERS)];
+  view.scrolls.forEach(([t, l], i) => { if (tg[i]) { tg[i].scrollTop = t; tg[i].scrollLeft = l; } });
+  return box;
+}
+// Build the sheet while idle, not on the first drag.
+(window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => { if ('ontouchstart' in window) sdPrevSheet(); });
 (function sdEdgeBack() {
   if (!('ontouchstart' in window)) return;
-  const EDGE = 28, COMMIT = 72, MAX = 96;
+  /* THE PAGE FOLLOWS THE FINGER (csharpdeveloper, Eric 2026-11-18: "for the
+     swipe back function can u make it so u actually swipe the screen back like
+     tiktok not this threshold with the back after"). The bubble is gone: a
+     touch from the left edge drags the page itself, 1:1, with a shadow on its
+     left side over a dim backdrop. Let go past COMMIT_F of the width (or flick)
+     and it slides off and the page before it slides in from the left; short of
+     that it springs back.
+     ⚠ The previous page isn't rendered under the finger (Back rebuilds it), so
+     it arrives on release (`slideIn`) — except over Search, where what's
+     under the overlay IS the page you go back to.
+     ⚠ Back's cover glide (onLivePill → sdMorph) stands down for this gesture
+     (`_sdEdgeBack`): the cover has already left with the page. */
+  const EDGE = 28, COMMIT_F = 0.33, FLICK = 0.45, OUT_MS = 190, IN_MS = 260;
   const SKIP = '#sd-log, .v3-rsh-ov, .ds-root, .qs-root, .cp-root, .wg-sheet, .sd-kb-bar, .sd-kb-lyr, .sd-kb-scrim';
-  let g = null, tip = null;
+  let g = null;
   const shown = el => el && el.offsetWidth > 0 && getComputedStyle(el).visibility !== 'hidden';
-  function backFor(t) {
+  const calm = () => document.documentElement.classList.contains('sd-reduce-motion');
+  function target(t) {
     if (!t || !t.closest || t.closest(SKIP)) return null;
     const sds = t.closest('.sds-overlay');
-    if (sds) { const b = sds.querySelector('.sds-back'); return shown(b) ? () => b.click() : null; }
+    if (sds) { const b = sds.querySelector('.sds-back'); return shown(b) ? { el: sds, go: () => b.click(), overlay: true } : null; }
     const scr = t.closest('.app-screen');
     if (!scr) return null;
     const btn = [...scr.querySelectorAll('.v3-hdr-back')].find(shown);
-    return btn ? () => sdHeaderBack(btn) : null;
+    return btn ? { el: scr, go: () => sdHeaderBack(btn) } : null;
   }
-  function bubble() {
-    if (tip) return tip;
-    tip = document.createElement('div');
-    tip.className = 'sd-edge-back';
-    tip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>';
-    document.body.appendChild(tip);
-    return tip;
+  function setX(el, x, ms) {
+    el.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.7,.2,1), box-shadow ${ms}ms ease` : 'none';
+    el.style.transform = x ? `translate3d(${x}px,0,0)` : '';
   }
-  /* The bubble rides to the RIGHT of the fingertip (Eric, 2026-11-17: "put
-     the back arrow on the right side of the finger so we can see it"), 26px
-     clear of the finger's x, at its height. */
-  let tipX = 0;
-  function paint(dx, y, x) {
-    const b = bubble(), p = Math.min(1, dx / COMMIT);
-    tipX = x + 26;
-    b.style.top = y + 'px';
-    b.style.transform = `translate(${tipX}px, -50%) scale(${0.7 + 0.3 * p})`;
-    b.style.opacity = String(Math.min(1, dx / 24));
-    b.classList.toggle('is-armed', dx >= COMMIT);
+  function lift(d) {
+    d.el.classList.add('sd-edge-drag');
+    if (!d.overlay && d.el.parentElement) d.el.parentElement.classList.add('sd-edge-host');
+    const top = !d.overlay && typeof backStack !== 'undefined' && backStack.length ? backStack[backStack.length - 1] : null;
+    d.prev = top && top._view ? sdShowPrev(top._view, d.el) : null;
   }
-  function hide() {
-    if (!tip) return;
-    tip.style.transition = 'transform .18s ease, opacity .18s ease';
-    tip.style.opacity = '0'; tip.style.transform = `translate(${tipX}px, -50%) scale(.7)`;
-    setTimeout(() => { if (tip) tip.style.transition = ''; }, 200);
+  // The kept page's place for a drag at dx: 28% to the left and dimmed at rest, home at the full width.
+  function placePrev(d, dx, ms) {
+    if (!d.prev) return;
+    const f = Math.max(0, 1 - dx / d.w);
+    d.prev.style.transition = ms ? `transform ${ms}ms cubic-bezier(.2,.7,.2,1)` : 'none';
+    d.prev.style.transform = `translate3d(${(-0.28 * d.w * f).toFixed(1)}px,0,0)`;
+    d.prev.style.setProperty('--sd-prev-dim', (0.45 * f).toFixed(3));
+    d.prev.style.setProperty('--sd-prev-ms', (ms || 0) + 'ms');
+  }
+  function drop(d) {
+    d.el.classList.remove('sd-edge-drag');
+    d.el.style.transition = ''; d.el.style.transform = '';
+    if (d.el.parentElement) d.el.parentElement.classList.remove('sd-edge-host');
+  }
+  // The page you land on comes in from the left (whatever element it turns out to be).
+  function slideIn(host, prev) {
+    if (calm()) return;
+    const scr = [...(host ? host.querySelectorAll(':scope > .app-screen') : [])].filter(e => !e.classList.contains('fade-exit')).pop() || prev;
+    if (!scr || !scr.isConnected) return;
+    const w = scr.getBoundingClientRect().width || 390;
+    scr.classList.remove('fade-enter');                  // no crossfade on top of the slide
+    scr.style.transition = 'none';
+    scr.style.transform = `translate3d(${-0.28 * w}px,0,0)`;
+    scr.style.opacity = '0.6';
+    void scr.offsetWidth;
+    scr.style.transition = `transform ${IN_MS}ms cubic-bezier(.2,.7,.2,1), opacity ${IN_MS}ms ease`;
+    scr.style.transform = ''; scr.style.opacity = '';
+    setTimeout(() => { scr.style.transition = ''; }, IN_MS + 30);
   }
   document.addEventListener('touchstart', e => {
     g = null;
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     if (t.clientX > EDGE) return;
-    const go = backFor(e.target);
-    if (go) g = { go, x0: t.clientX, y0: t.clientY, t0: Date.now(), on: false, dx: 0, lx: t.clientX, lt: Date.now(), v: 0 };
+    const tg = target(e.target);
+    if (tg) g = Object.assign(tg, { x0: t.clientX, y0: t.clientY, on: false, dx: 0, lx: t.clientX, lt: Date.now(), v: 0 });
   }, { passive: true, capture: true });
   document.addEventListener('touchmove', e => {
     if (!g) return;
@@ -16371,33 +16467,72 @@ window.addEventListener('resize', () => {
       if (Math.abs(dy) > 12 && Math.abs(dy) > dx) { g = null; return; }   // a scroll, not ours
       if (dx < 8) return;
       g.on = true;
+      g.w = g.el.getBoundingClientRect().width || window.innerWidth;
+      lift(g);
     }
     e.preventDefault(); e.stopPropagation();
     const now = Date.now();
     g.v = (t.clientX - g.lx) / Math.max(1, now - g.lt); g.lx = t.clientX; g.lt = now;
-    g.dx = Math.max(0, dx);
-    paint(g.dx, t.clientY, t.clientX);
+    g.dx = Math.max(0, Math.min(g.w, dx));
+    setX(g.el, g.dx);
+    placePrev(g, g.dx);
   }, { passive: false, capture: true });
+  const commits = d => d.dx >= d.w * COMMIT_F || (d.dx > 30 && d.v > FLICK);
   const end = e => {
     if (!g) return;
     const d = g; g = null;
     if (!d.on) return;
-    hide();
-    if (e.type === 'touchend' && (d.dx >= COMMIT || (d.dx > 30 && d.v > 0.5))) {
-      // Tick FIRST, while touchend's user activation is fresh (iOS only plays
-      // the switch haptic inside one), then swallow the tap.
+    if (e.type === 'touchend' && commits(d)) {
       try { sdHaptic(8); } catch (x) {}
-      e.preventDefault();   // the lifted finger must not also tap what's under it
-      d.go();
+      e.preventDefault();                                // the lifted finger must not also tap what's under it
+      setX(d.el, d.w, OUT_MS);                           // off to the right…
+      placePrev(d, d.w, OUT_MS);                         // …and the kept page home under it
+      setTimeout(() => {
+        const host = d.el.parentElement;
+        const before = host ? [...host.children] : [];
+        window._sdEdgeBack = true;
+        try { d.go(); } finally { setTimeout(() => { window._sdEdgeBack = false; }, 0); }
+        if (d.prev) {
+          /* The real page is built where the copy sits. A NEW screen arrives as
+             the phone's crossfade (.fade-enter) — shown at once instead, and the
+             copy stays under it until the old screen has gone. */
+          const fresh = host ? [...host.children].filter(x => !before.includes(x) && x.classList && x.classList.contains('app-screen')) : [];
+          fresh.forEach(x => { x.style.animation = 'none'; x.style.opacity = '1'; });
+          const kids = host ? [...host.children].filter(x => x.classList && x.classList.contains('app-screen')) : [];
+          const replaced = !d.el.isConnected || d.el.classList.contains('fade-exit') || (kids.length && kids[kids.length - 1] !== d.el);
+          const prev = d.prev; d.prev = null;
+          if (replaced) {
+            d.el.style.opacity = '0';
+            setTimeout(() => { prev.remove(); if (host) host.classList.remove('sd-edge-host'); fresh.forEach(x => { x.style.animation = ''; x.style.opacity = ''; }); }, 360);
+          } else {
+            drop(d);
+            requestAnimationFrame(() => prev.remove());
+          }
+          return;
+        }
+        if (d.overlay) {                                 // the search closes off-screen, then sits back for next time
+          setTimeout(() => drop(d), 380);
+          return;
+        }
+        // A NEW screen replaced this one (the phone crossfades the old out): keep the
+        // old one off to the right while it goes. Same element (album → feed): put it back.
+        const kids = host ? [...host.children].filter(x => x.classList && x.classList.contains('app-screen')) : [];
+        const replaced = !d.el.isConnected || d.el.classList.contains('fade-exit') || (kids.length && kids[kids.length - 1] !== d.el);
+        if (replaced) { d.el.style.opacity = '0'; setTimeout(() => { if (host) host.classList.remove('sd-edge-host'); }, IN_MS + 60); }
+        else drop(d);
+        slideIn(host, d.el);                             // …and the page before comes in from the left
+      }, OUT_MS);
+    } else {
+      setX(d.el, 0, 220);                                // not far enough: spring back
+      placePrev(d, 0, 220);
+      setTimeout(() => { drop(d); if (d.prev) { d.prev.remove(); d.prev = null; } }, 240);
     }
   };
-  /* HAPTIC TRY #2 (2026-11-17): touchend after a drag gave no tick on Eric's
-     iPhone. pointerup fires just BEFORE touchend on iOS and is its own
-     activation event in the spec, so the tick is tried there first (sdHaptic's
-     60ms throttle keeps it to one if both work). */
+  /* HAPTIC: pointerup fires just before touchend on iOS and is its own
+     activation event, so the tick is tried there first (sdHaptic throttles). */
   document.addEventListener('pointerup', e => {
     if (e.pointerType !== 'touch' || !g || !g.on) return;
-    if (g.dx >= COMMIT || (g.dx > 30 && g.v > 0.5)) { try { sdHaptic(8); } catch (x) {} }
+    if (commits(g)) { try { sdHaptic(8); } catch (x) {} }
   }, true);
   document.addEventListener('touchend', end, { passive: false, capture: true });
   document.addEventListener('touchcancel', end, { capture: true });

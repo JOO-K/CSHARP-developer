@@ -14595,3 +14595,18 @@ html.sd-reduce-motion .v3-bottom-nav.is-quick .v3-nav-dots i { animation: none; 
 .v3-ap-head .v3-song-title { padding-left: 0; }
 .v3-ap-fav { display: inline-flex; vertical-align: -1px; margin-left: 6px; color: #ff5c8a; }
 .v3-ap-fav svg { width: 11px; height: 11px; fill: currentColor; stroke: currentColor; }
+/* EDGE SWIPE BACK, THE PAGE FOLLOWS THE FINGER (csharpdeveloper, 2026-11-18;
+   sdEdgeBack in app.js). The dragged page casts a shadow on its left edge over
+   a dim backdrop (its container, while the drag lasts). */
+.sd-edge-drag { will-change: transform; box-shadow: -14px 0 32px rgba(0,0,0,.45); position: relative; z-index: 2; }
+.sd-edge-host { background: #050507 !important; }
+.sd-edge-host::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(120% 80% at 0% 50%, rgba(255,255,255,0.05), transparent 60%);
+}
+
+/* The page behind the finger (sdShowPrev): under the dragged page, dimmed by
+   --sd-prev-dim as it waits 28% to the left. */
+.sd-prev-page {
+  position: absolute; z-index: 1; pointer-events: none; overflow: hidden; will-change: transform;
+}
