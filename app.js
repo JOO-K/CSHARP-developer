@@ -15863,17 +15863,22 @@ window.addEventListener('resize', () => {
     document.body.appendChild(tip);
     return tip;
   }
-  function paint(dx, y) {
+  /* The bubble rides to the RIGHT of the fingertip (Eric, 2026-11-17: "put
+     the back arrow on the right side of the finger so we can see it"), 26px
+     clear of the finger's x, at its height. */
+  let tipX = 0;
+  function paint(dx, y, x) {
     const b = bubble(), p = Math.min(1, dx / COMMIT);
+    tipX = x + 26;
     b.style.top = y + 'px';
-    b.style.transform = `translate(${Math.min(dx, MAX) * 0.55 - 44}px, -50%) scale(${0.7 + 0.3 * p})`;
+    b.style.transform = `translate(${tipX}px, -50%) scale(${0.7 + 0.3 * p})`;
     b.style.opacity = String(Math.min(1, dx / 24));
     b.classList.toggle('is-armed', dx >= COMMIT);
   }
   function hide() {
     if (!tip) return;
     tip.style.transition = 'transform .18s ease, opacity .18s ease';
-    tip.style.opacity = '0'; tip.style.transform = 'translate(-44px, -50%) scale(.7)';
+    tip.style.opacity = '0'; tip.style.transform = `translate(${tipX}px, -50%) scale(.7)`;
     setTimeout(() => { if (tip) tip.style.transition = ''; }, 200);
   }
   document.addEventListener('touchstart', e => {
@@ -15896,7 +15901,7 @@ window.addEventListener('resize', () => {
     const now = Date.now();
     g.v = (t.clientX - g.lx) / Math.max(1, now - g.lt); g.lx = t.clientX; g.lt = now;
     g.dx = Math.max(0, dx);
-    paint(g.dx, t.clientY);
+    paint(g.dx, t.clientY, t.clientX);
   }, { passive: false, capture: true });
   const end = e => {
     if (!g) return;
@@ -15911,6 +15916,14 @@ window.addEventListener('resize', () => {
       d.go();
     }
   };
+  /* HAPTIC TRY #2 (2026-11-17): touchend after a drag gave no tick on Eric's
+     iPhone. pointerup fires just BEFORE touchend on iOS and is its own
+     activation event in the spec, so the tick is tried there first (sdHaptic's
+     60ms throttle keeps it to one if both work). */
+  document.addEventListener('pointerup', e => {
+    if (e.pointerType !== 'touch' || !g || !g.on) return;
+    if (g.dx >= COMMIT || (g.dx > 30 && g.v > 0.5)) { try { sdHaptic(8); } catch (x) {} }
+  }, true);
   document.addEventListener('touchend', end, { passive: false, capture: true });
   document.addEventListener('touchcancel', end, { capture: true });
 })();

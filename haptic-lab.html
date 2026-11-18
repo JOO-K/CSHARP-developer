@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Haptic Lab</title>
+<!-- Dev tool (csharpdeveloper, 2026-11-17): which touch events can still play
+     the iOS switch haptic AFTER A DRAG (the edge-swipe Back gave no tick from
+     touchend). Drag right across each box and let go; the box flashes and
+     counts every time it tried to tick, so "flashed but no buzz" = iOS said no. -->
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #111116; color: #e8e2d6; font: 15px/1.4 -apple-system, system-ui, sans-serif; padding: 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p { margin: 0 0 14px; opacity: .65; font-size: 13px; }
+  .z { height: 92px; border-radius: 14px; background: #202028; margin: 0 0 12px; padding: 12px 14px; box-sizing: border-box;
+       touch-action: none; user-select: none; -webkit-user-select: none; transition: background .12s; }
+  .z b { display: block; font-size: 15px; }
+  .z span { font-size: 12.5px; opacity: .6; }
+  .z.hit { background: #3b82f6; }
+</style>
+</head>
+<body>
+<h1>Haptic lab</h1>
+<p>Drag your finger RIGHT across each box (at least a thumb's width), then lift. Note which ones buzz.</p>
+<div class="z" data-on="touchend"><b>A · touchend</b><span>tick when you lift (what Back does now)</span></div>
+<div class="z" data-on="pointerup"><b>B · pointerup</b><span>tick when you lift, pointer event</span></div>
+<div class="z" data-on="touchstart"><b>C · touchstart</b><span>tick the moment you touch down</span></div>
+<div class="z" data-on="click"><b>D · plain tap (control)</b><span>just tap this one — should always buzz</span></div>
+<script>
+function tick() {
+  const lb = document.createElement('label');
+  lb.style.display = 'none';
+  lb.innerHTML = '<input type="checkbox" switch>';
+  document.body.appendChild(lb);
+  lb.click();
+  lb.remove();
+  try { navigator.vibrate && navigator.vibrate(10); } catch (x) {}
+}
+document.querySelectorAll('.z').forEach(z => {
+  let n = 0, x0 = 0;
+  const flash = () => { n++; z.querySelector('span').textContent = 'tried ' + n + '×'; z.classList.add('hit'); setTimeout(() => z.classList.remove('hit'), 160); };
+  const on = z.dataset.on;
+  z.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; if (on === 'touchstart') { tick(); flash(); } }, { passive: true });
+  z.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  if (on === 'touchend') z.addEventListener('touchend', e => { if (e.changedTouches[0].clientX - x0 > 40) { tick(); flash(); } });
+  if (on === 'pointerup') z.addEventListener('pointerup', e => { if (e.clientX - x0 > 40) { tick(); flash(); } });
+  if (on === 'click') z.addEventListener('click', () => { tick(); flash(); });
+});
+</script>
+</body>
+</html>
