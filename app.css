@@ -14563,3 +14563,25 @@ html.sd-reduce-motion .v3-bottom-nav.is-quick .v3-nav-dots i { animation: none; 
 .s-home-v3--light .v3-ap-n, .s-home-v3--light .v3-ap-s { color: rgba(26,18,8,0.45); }
 .s-home-v3--light .v3-ap-t { color: #1a1208; }
 .s-home-v3--light .v3-ap-more { border-color: rgba(26,18,8,0.16); color: #1a1208; }
+/* The artist page's heart, the size of the reviews' like hearts (25px; Eric 11-18). */
+.s-home-v3--review.s-home-v3--album.s-home-v3--artist .v3-artist-fav .sd-dot-ico,
+.s-home-v3--review.s-home-v3--album.s-home-v3--artist .v3-artist-fav svg { width: 25px; height: 25px; }
+
+/* Artist page Popular songs = the album page's rows (Eric 11-18): same columns
+   (the widths .v3-rev-songs gives its rows), same 12px gutter, plus a small
+   cover and the album name under the title. */
+.v3-ap-songs { --song-dur-w: 54px; --song-rate-w: 42px; margin-top: 4px; }
+.v3-ap-sec { text-align: left; }
+.v3-ap-row .v3-ap-art { width: 34px; height: 34px; border-radius: 4px; }
+.v3-ap-row .v3-ap-main { display: flex; flex-direction: column; gap: 1px; }
+.v3-ap-row .v3-ap-t { font-size: 12.5px; font-weight: 500; color: inherit; }
+.v3-ap-row .v3-ap-s { font-size: 10.5px; }
+.s-home-v3--light.s-home-v3--album .v3-ap-row .v3-ap-s { color: rgba(26,18,8,0.45); }
+
+/* Reviews on the album and artist pages sit like the home feed's (Eric 11-18:
+   "same margins as the reviews on the homepage, a bit too close to the sides"):
+   the card's rule 10px from the screen's edges, its contents 16px in. The album
+   page's panel already pads 10px; the artist page's pads 0. */
+.s-home-v3.s-home-v3--review.s-home-v3--album:not(.s-home-v3--artist) .v3-rev-list { margin-left: 0; margin-right: 0; }
+.s-home-v3.s-home-v3--review.s-home-v3--album.s-home-v3--artist .v3-rev-list { margin-left: 10px; margin-right: 10px; }
+.s-home-v3.s-home-v3--review.s-home-v3--album .v3-rev-list > .v3-rev-card { padding-left: 6px; padding-right: 6px; }

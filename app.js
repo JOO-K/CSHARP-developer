@@ -615,6 +615,14 @@ function captureScreenSnap() {
   const snap = { review: false, screenId: id };
   if (id === 'profile')  { snap.profile = { ...window.PROFILE }; snap.guest = window.PROFILE_GUEST || null; }
   if (id === 'playlist') snap.playlist = window.activePlaylist;
+  /* The home feed's place (csharpdeveloper 11-18): the album page shares the
+     feed's scroller and resets it to the top, so Back lost your spot — and the
+     card you tapped, which the cover glides back onto. */
+  if (id === 'home') {
+    const s = homeShells().find(e => e.getBoundingClientRect().width && !e.classList.contains('s-home-v3--review'));
+    const body = s && s.querySelector('.v3-body');
+    if (body) snap.scroll = body.scrollTop;
+  }
   return sdsTagSnap(snap);
 }
 /* A SEARCH YOU LEFT FROM comes back (Eric, 2026-10-13: "when u go back from
@@ -795,10 +803,20 @@ window.goBack = function (fallbackId) {
   if (snap.playlist) window.activePlaylist = snap.playlist;
   if (snap.screenId && snap.screenId !== currentScreen().id) {        // a different screen
     navigate(snap.screenId, 'back');
+    if (snap.scroll && snap.screenId === 'home') setTimeout(() => sdRestoreFeedScroll(snap.scroll), 60);
     return;
   }
   shells.forEach(s => exitToBento(s));                                  // back to the bento home
+  if (snap.scroll) sdRestoreFeedScroll(snap.scroll);
 };
+// Put the home feed back where it was (a rebuilt feed may still be filling: try again a beat later).
+function sdRestoreFeedScroll(y) {
+  const put = () => homeShells().forEach(s => {
+    if (s.classList.contains('s-home-v3--review') || !s.getBoundingClientRect().width) return;
+    const body = s.querySelector('.v3-body'); if (body) body.scrollTop = y;
+  });
+  put(); setTimeout(put, 120);
+}
 
 // ── Bento → album page ────────────────────────────────────────
 // There used to be a plain fullscreen "review" state in between: tapping the
@@ -1072,13 +1090,34 @@ function apPaintSongs(scr, a) {
     if (!sec2) return;
     scr._apList = list;
     const n = Math.min(list.length, AP_SHOWN.get(k) || AP_STEP);
-    sec2.querySelector('.v3-ap-songs').innerHTML = list.slice(0, n).map((t, i) => {
-      const art = String(t.album.cover_medium || t.album.cover_big || t.album.cover_xl || '').replace(/'/g, '%27');
-      return `<button class="v3-ap-song" type="button" data-i="${i}" onclick="event.stopPropagation(); apSongOpen(this)">
-          <span class="v3-ap-n">${i + 1}</span>
-          <span class="v3-ap-art" style="background-image:url('${art}')"></span>
-          <span class="v3-ap-main"><span class="v3-ap-t">${_sdsEsc(t.title)}</span><span class="v3-ap-s">${_sdsEsc(t.album.title || '')}</span></span>
-        </button>`;
+    /* THE ALBUM PAGE'S ROWS (Eric 11-18: "lets not center the popular songs and
+       lets have the same options to like and see comments as the songs on the
+       album page"). Same markup and classes as populateSongList, so the same
+       left gutter and columns: number (a heart once you favourite the song) ·
+       title · comment bubble + count · rating (yours in green, tap to flip).
+       Keys are the song's title + ITS album, exactly as there, so a like or a
+       comment here is the same one on the album page. The row opens the song
+       sheet (apSongLog), where the like and the thread are. Each row also
+       carries its cover small, since the songs come from different records. */
+    sec2.querySelector('.v3-ap-songs').innerHTML = `
+      <div class="v3-song-head">
+        <span class="v3-song-num"></span>
+        <span class="v3-song-title">Song</span>
+        <span class="v3-song-dur">Comments</span>
+        <span class="v3-song-rate">Rating</span>
+      </div>` + list.slice(0, n).map((t, i) => {
+      const albName = t.album.title || '';
+      const alb = { album: albName, artist: (t.artist && t.artist.name) || a.artist };
+      const ck = songCmtKey(t.title, albName), ct = songCmtTotal(t.title, albName);
+      const art = String(t.album.cover_small || t.album.cover_medium || '').replace(/'/g, '%27');
+      return `
+      <button class="v3-song-row v3-ap-row" type="button" data-i="${i}" data-title="${_revAttr(t.title)}" onclick="event.stopPropagation(); apSongLog(this)">
+        <span class="v3-song-num">${songNumHtml(alb, t.title, i)}</span>
+        <span class="v3-ap-art" style="background-image:url('${art}')"></span>
+        <span class="v3-song-title v3-ap-main"><span class="v3-ap-t">${_sdsEsc(t.title)}</span><span class="v3-ap-s">${_sdsEsc(albName)}</span></span>
+        <span class="v3-song-dur v3-song-cmt">${CMT_SVG}<span class="v3-song-cmt-n" data-k="${_revAttr(ck)}" data-n="${ct}">${cmtCount(ck, ct) || ''}</span></span>
+        ${songRateHtml(alb, { title: t.title, rating: apSongRating(t.title, albName) })}
+      </button>`;
     }).join('');
     sec2.querySelector('.v3-ap-more').hidden = n >= list.length;
     sec2.hidden = !list.length;
@@ -1092,6 +1131,19 @@ window.apMoreSongs = function (btn) {
   const k = String(a.artist || '').toLowerCase();
   AP_SHOWN.set(k, (AP_SHOWN.get(k) || AP_STEP) + AP_STEP);
   homeShells().forEach(s => { if (s.classList.contains('s-home-v3--artist') && s._album && s._album.artist === a.artist) apPaintSongs(s, s._album); });
+};
+// Deezer gives no rating: one seeded per song (3.4–4.8), the same every time, like the tracklists'.
+function apSongRating(title, album) {
+  const r = seedRand('aprate::' + title + '::' + album)();
+  return Math.round((3.4 + r * 1.4) * 10) / 10;
+}
+// The row's tap: the song sheet, as on the album page — keyed to the song's OWN album.
+window.apSongLog = function (el) {
+  const scr = el && el.closest('.s-home-v3');
+  const t = scr && scr._apList && scr._apList[+el.dataset.i];
+  if (!t) return;
+  openLogSheet(el, { image: t.album.cover_xl || t.album.cover_big || t.album.cover_medium || '', title: t.title,
+    subtitle: t.album.title || '', year: '', isSong: true });
 };
 window.apSongOpen = function (el) {
   const scr = el && el.closest('.s-home-v3');
@@ -2342,7 +2394,7 @@ window.onLivePill = function (btn) {
     const top = backStack[backStack.length - 1];
     const cover = scr.querySelector('.v3-album'), album = scr._album;
     if (cover && typeof sdMorph === 'function' && scr.classList.contains('s-home-v3--album') && !scr.classList.contains('s-home-v3--artist') && (!top || !top.review)) {
-      sdMorph(cover, () => sdFindCoverHome(album), () => goBack(), { destImage: false });
+      sdMorph(cover, () => sdFindCoverHome(album), () => goBack(), { destImage: false, lift: false });
     } else goBack();
     return;
   }
@@ -2556,10 +2608,15 @@ function populateReviewPanel(scr) {
    label info"). The Player's lookup (sdWikiFor, player.js: Wikipedia's action
    API, the intro paragraph, cached per artist in sd-wiki-v1), clamped to four
    lines with a "From Wikipedia" link (CC BY-SA). Nothing found → nothing shown. */
+const SD_ALBUM_WIKI = false;
 function populateAlbumWiki(scr, a) {
   const box = scr && scr.querySelector('.v3-alb-wiki');
   if (!box) return;
   box.hidden = true;
+  /* OFF (Eric, 11-18 later: "only get the description on the artist page and
+     not the album page"). The artist page's Description row carries it; flip
+     SD_ALBUM_WIKI to bring this paragraph back. */
+  if (!SD_ALBUM_WIKI) return;
   if (!a || typeof window.sdWikiFor !== 'function') return;
   window.sdWikiFor(a).then(w => {
     if (!w || scr._album !== a) return;
@@ -10170,6 +10227,8 @@ window.closeLogSheet = function() {
   // (Not `forEach(syncQuickLog)` — that hands the array INDEX in as the album,
   // so the second shell read albumDraft(1) → {} and was wiped on every close.)
   homeShells().forEach(s => syncQuickLog(s));
+  // The artist page's Popular songs: a heart or a rating changed in the song sheet.
+  homeShells().forEach(s => { if (s.classList.contains('s-home-v3--artist') && s._album && typeof apPaintSongs === 'function') apPaintSongs(s, s._album); });
   // Trending's circle and list too (no .v3-album there, so homeShells skips it).
   document.querySelectorAll('.s-wall2').forEach(s => { if (s._album) wallPaintReviews(s, s._album); });
   // Opened from the +'s list and closed without posting → back to that list.

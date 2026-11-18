@@ -568,10 +568,13 @@
     if (!ol) return;
     if (!list) { ol.innerHTML = '<li class="ds-tr-msg">No preview for this one</li>'; return; }
     const a = DS.list[+card.dataset.i];
+    // The saved drafts ONCE for the whole list (11-18): songFav / songLikes each parse the store, twice a song.
+    let drafts = {}; try { drafts = logDrafts(); } catch (e) {}
+    const fav = t => !!(drafts[logKey(songSubj(a, t))] || {}).fav;
     ol.innerHTML = ordered(list).map(t => `
       <li class="ds-tr${t.preview ? '' : ' none'}" data-n="${t.n}">
         <span class="ds-tr-n">${t.pos}</span><span class="ds-tr-t">${esc(t.title)}</span>
-        <button class="ds-tr-like${songFav(a, t) ? ' on' : ''}" data-n="${t.n}" aria-label="Like this song">${HEART}<span>${songLikes(a, t).toLocaleString('en-US')}</span></button>
+        <button class="ds-tr-like${fav(t) ? ' on' : ''}" data-n="${t.n}" aria-label="Like this song">${HEART}<span>${(Math.max(3, Math.round((t.rank || 0) / 240)) + (fav(t) ? 1 : 0)).toLocaleString('en-US')}</span></button>
         <span class="ds-tr-d">${fmtT(t.dur)}</span>
       </li>`).join('');
     ol.scrollTop = 0;
@@ -616,8 +619,18 @@
     box.style.top = (cur + (want - icon.getBoundingClientRect().top) / scale).toFixed(1) + 'px';
   }
   window.addEventListener('resize', () => {
-    if (DS.scroller) DS.scroller.querySelectorAll('.ds-card').forEach(c => { fitTitle(c); alignRail(c); });
+    if (DS.scroller) DS.scroller.querySelectorAll('.ds-card').forEach(c => { if (c._prep) { fitTitle(c); alignRail(c); } });
   });
+
+  function prep(card) {
+    if (!card || card._prep) return;
+    card._prep = true;
+    if (DS.prepObs) DS.prepObs.unobserve(card);
+    tint(card, DS.list[+card.dataset.i]);
+    fitTitle(card);
+    alignRail(card);
+  }
+  function prepAround(i) { for (let k = i - 1; k <= i + 1; k++) prep(cardAt(k)); }
 
   /* A long album name steps its font down until it fits in two lines of the
      column between the rails (round 19); .ds-album's 2-line clamp catches
@@ -669,18 +682,24 @@
     if (ahead < 3) appendBatch();
   }
 
-  function appendBatch() {
-    const from = DS.shown, to = Math.min(DS.list.length, from + BATCH);
+  function appendBatch(count) {
+    const from = DS.shown, to = Math.min(DS.list.length, from + (count || BATCH));
     if (from >= to) return;
     const tmp = document.createElement('div');
     tmp.innerHTML = DS.list.slice(from, to).map((a, k) => cardHtml(a, from + k)).join('');
-    [...tmp.children].forEach(card => {
-      DS.scroller.appendChild(card);
-      tint(card, DS.list[+card.dataset.i]);
-      DS.obs.observe(card);
-      fitTitle(card);
-      alignRail(card);
-    });
+    /* LAZY PREP (csharpdeveloper, Eric 11-18: "when u go back from album it lags
+       A LOT"). Every card used to be tinted (a canvas pass over its cover),
+       title-fitted and rail-aligned the moment it was added — a dozen forced
+       layouts each, interleaved with the next card's insert — and Back's resume
+       adds every card up to the one you left: ~275ms in one block. Now the cards
+       go in as ONE insert and each is prepared only as it nears the screen
+       (DS.prepObs, 1.5 screens ahead), or at once when it is the one you land on
+       (prepAround, from build). */
+    const frag = document.createDocumentFragment();
+    const cards = [...tmp.children];
+    cards.forEach(card => frag.appendChild(card));
+    DS.scroller.appendChild(frag);
+    cards.forEach(card => { DS.obs.observe(card); if (DS.prepObs) DS.prepObs.observe(card); else prep(card); });
     DS.shown = to;
     if (DS.active >= 0) cullBgs(DS.scroller, '.ds-bg', DS.active);
     // warm the next couple of tracklists so the songs are there on arrival
@@ -767,7 +786,11 @@
     DS.raf = requestAnimationFrame(drawViz);
     const card = cardAt(DS.active), cv = card && card.querySelector('.ds-viz');
     if (!cv) return;
-    const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+    /* The canvas's size is read when the card changes (or every ~2s), not every
+       frame: clientWidth forces a layout, and while cards were being added it
+       paid for all of them, every frame (11-18, the Back lag). */
+    if (cv !== DS.vizCv || !(DS.vizN = (DS.vizN || 0) + 1) || DS.vizN % 120 === 0) { DS.vizCv = cv; DS.vizW = cv.clientWidth; DS.vizH = cv.clientHeight; }
+    const dpr = window.devicePixelRatio || 1, W = DS.vizW, H = DS.vizH;
     if (!W || !H) return;
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
       cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
@@ -969,7 +992,13 @@
     const r = DS.landing;
     if (r && r.i === i) { DS.landing = null; playTrack(i, r.n, r.t); }
     else playTrack(i);
-    if (i >= DS.shown - 3) appendBatch();
+    // Top up the feed — a beat later unless you are already on the last card, so
+    // landing (a fresh open, Back's resume) is not paying for the cards after it (11-18).
+    if (i >= DS.shown - 3) {
+      const tok = DS.buildTok;
+      if (i >= DS.shown - 1) appendBatch();
+      else setTimeout(() => { if (DS.root && tok === DS.buildTok && DS.active >= DS.shown - 3) appendBatch(); }, 250);
+    }
     // the screen behind takes this album's colours too, like the deck does
     const a = DS.list[i], host = DS.root && DS.root.parentElement;
     if (a && host && typeof applyAlbumColorsUrl === 'function') applyAlbumColorsUrl(host, a.image);
@@ -1108,16 +1137,24 @@
     DS.obs = new IntersectionObserver(entries => {
       entries.forEach(en => { if (en.isIntersecting) setActive(+en.target.dataset.i); });
     }, { root: DS.scroller, threshold: 0.6 });
-    appendBatch();
+    if (DS.prepObs) DS.prepObs.disconnect();
+    DS.prepObs = new IntersectionObserver(entries => {
+      entries.forEach(en => { if (en.isIntersecting) prep(en.target); });
+    }, { root: DS.scroller, rootMargin: '150% 0px' });
+    /* SMALL FIRST BUILD (11-18, the Back lag): only the cards up to the one you
+       land on, plus one. setActive appends the next batch a frame later, when
+       the feed is already on screen, instead of all of it laying out at once. */
+    const ri = resume ? DS.list.findIndex(a => a.artist + '|' + a.album === resume.key) : -1;
+    appendBatch(Math.max(3, ri + 2));
     if (resume) {                                   // land back on the album (and song, and second) you left
-      const i = DS.list.findIndex(a => a.artist + '|' + a.album === resume.key);
+      const i = ri;
       if (i > 0) {
-        while (DS.shown <= i && DS.shown < DS.list.length) appendBatch();
         const c = cardAt(i);
         if (c) DS.scroller.scrollTop = c.offsetTop;
       }
       if (i >= 0) DS.landing = { i, n: resume.n, t: resume.t };
-    }
+      prepAround(Math.max(0, i));                   // the card you land on is ready on the first frame
+    } else prepAround(0);
   }
 
   window.sdDoomClose = function () {

@@ -49,8 +49,12 @@
   const imgOf = el => imgSrc(el) || bgOf(el) || bgOf(el.querySelector && el.querySelector('[style*="background-image"]'));
   const shown = el => { if (!el || !el.isConnected) return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
 
+  /* `lift: false` (Back): no clone until the destination is found — if the
+     cover you came from is not on the screen you return to, nothing glides and
+     nothing is left hanging (it used to float for 1.5s: Eric, 11-18). */
   window.sdMorph = function (src, findDest, go, opts) {
     opts = opts || {};
+    if (opts.lift === false) return morphLate(src, findDest, go, opts);
     // `src` may be a SNAPSHOT ({ box, img, r }) of something already gone — Swipe closes its feed before the album opens.
     const snap = src && src.box;
     if (!src || (!snap && !src.getBoundingClientRect) || matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -98,20 +102,50 @@
     setTimeout(fly, 0);
   };
 
+  function morphLate(src, findDest, go, opts) {
+    if (!src || !src.getBoundingClientRect || matchMedia('(prefers-reduced-motion: reduce)').matches
+        || document.documentElement.classList.contains('sd-reduce-motion')) { go(); return; }
+    const from = rect(src);
+    const img = imgOf(src), r0 = getComputedStyle(src).borderRadius;
+    if (!from.w || !from.h) { go(); return; }
+    if (live) { live.remove(); live = null; }
+    window._sdMorph = true;
+    try { go(); } finally { setTimeout(() => { window._sdMorph = false; }, 900); }
+    const t0 = performance.now();
+    const look = () => {
+      const dest = findDest();
+      if (!shown(dest)) { if (performance.now() - t0 < 500) requestAnimationFrame(look); return; }
+      window.sdMorph(Object.assign({ box: from, img, r: r0 }), () => dest, () => {}, { destImage: opts.destImage });
+    };
+    setTimeout(look, 0);
+  }
+
   /* The album page's cover, on whichever shell is SHOWING it (the hidden theme
      twin is filled a beat later, and the first match in the DOM may be it). */
   window.sdFindAlbumCover = () => [...document.querySelectorAll('#phone-container .s-home-v3--album .v3-album, #mobile-content .s-home-v3--album .v3-album')].find(shown) || null;
   // The profile card's picture.
   window.sdFindProfilePic = () => [...document.querySelectorAll('#phone-container .s-prof2 .prof-pic, #mobile-content .s-prof2 .prof-pic')].find(shown) || null;
-  // Where a cover came from, for Back: the deck's front card on a home shell, or the wall tile naming the album.
+  /* Where a cover came from, for Back (csharpdeveloper 11-18): any picture of
+     THIS album on the screen you return to — a feed card, a rail, a tile —
+     matched by the cover's file (Deezer's md5 or the local filename), on screen
+     and inside the phone. It used to look for the carousel's front card, which
+     is on Trending now, so Back off a home-feed album had nowhere to land. */
+  const coverKey = url => {
+    const u = String(url || '');
+    const m = u.match(/\/cover\/([0-9a-f]{16,})\//i) || u.match(/([^\/'"()]+)\.(?:jpe?g|png|webp)/i);
+    return m ? m[1] : '';
+  };
   window.sdFindCoverHome = album => {
-    const home = [...document.querySelectorAll('#phone-container .s-home-v3:not(.s-home-v3--review), #mobile-content .s-home-v3:not(.s-home-v3--review)')].find(shown);
-    const card = home && home.querySelector(`.v3-fb-card[data-i="${home._fbCur || 0}"]`);
-    if (card) return card;
-    if (!album) return null;
-    const tiles = [...document.querySelectorAll('#phone-container .wall2-cell, #mobile-content .wall2-cell')];
-    const t = tiles.find(c => c.dataset.alb === album.album && (!c.dataset.art || c.dataset.art === album.artist));
-    return t ? (t.querySelector('.wall2-art') || t) : null;
+    const key = album && coverKey(album.image);
+    if (!key) return null;
+    const box = (document.querySelector('#mobile-content') && document.querySelector('#mobile-content').getBoundingClientRect().width)
+      ? document.querySelector('#mobile-content') : document.querySelector('#phone-container');
+    const area = box ? box.getBoundingClientRect() : { top: 0, bottom: innerHeight, left: 0, right: innerWidth };
+    return [...document.querySelectorAll(`#phone-container [style*="${key}"], #mobile-content [style*="${key}"]`)].find(e => {
+      if (!shown(e) || e.closest('.s-home-v3--review') && e.classList.contains('v3-album')) return false;
+      const r = e.getBoundingClientRect();
+      return r.width >= 24 && r.bottom > area.top + 40 && r.top < area.bottom - 90 && r.right > area.left && r.left < area.right;
+    }) || null;
   };
 
   /* AUTO MORPH. The picture under the last tap: the element itself, a parent
