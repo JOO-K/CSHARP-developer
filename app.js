@@ -639,6 +639,7 @@ function captureScreenSnap() {
    the finger. Phone build only (#mobile-content). */
 const SD_PREV_SCROLLERS = '.v3-body, .sds-body, .ds-scroll, .qs-scroll, .wall2-scroll, .wb-rail, .v3-aa-row, .v3-feed-items';
 function sdKeepPage() {
+  if (typeof SD_HIST !== 'undefined' && SD_HIST.on) return null;   // a browser tab: Safari's swipe shows its own snapshot
   const host = document.getElementById('mobile-content');
   if (!host || !host.getBoundingClientRect().width) return null;
   const scr = [...host.children].filter(e => e.classList && e.classList.contains('app-screen') && !e.classList.contains('fade-exit')).pop();
@@ -785,11 +786,66 @@ window.sdOpenFromHeader = function (id) {
 window.sdNavTab = function (id) {
   if (id === 'home') sdPostReset();
   backStack.length = 0;
+  sdHistSync();
   if (typeof closeSearch === 'function') closeSearch();
   window.SD_QUICK = false;
   window.SD_TAB = id;   // the tab that owns the view (THE NAV BUBBLE) — after closeSearch, which hands back its own
   navigate(id);
 };
+/* BROWSER HISTORY = THE BACK STACK (csharpdeveloper, Eric 2026-11-18: "the back
+   swipe reloads the page and does the back again"). The app never wrote to
+   the browser's history, so in Safari the system's own edge swipe went back a
+   WEBSITE — a reload — while ours went back a page too. Now, in a browser tab
+   on a touch device, the history mirrors backStack one entry per step:
+     · backStack grows (any forward step) → pushState;
+     · backStack shrinks (the caret, a tab tap clearing it) → history.go(-n),
+       and the popstate that causes is ignored (SD_HIST.skip);
+     · the BROWSER goes back (Safari's swipe, Android's back, the Back button)
+       → popstate → goBack(), with Back's cover glide stood down (_sdEdgeBack:
+       Safari has already animated the page away).
+   sdHistSync reconciles by COUNT after every change, so the two can't drift.
+   In the home-screen app there is no system swipe: history stays untouched and
+   our own drag (sdEdgeBack) is the gesture. In a tab, sdEdgeBack stands down. */
+const SD_HIST = { on: false, depth: 0, skip: 0, t: 0 };
+function sdHistSync() {
+  if (!SD_HIST.on || SD_HIST.t) return;
+  SD_HIST.t = setTimeout(() => {
+    SD_HIST.t = 0;
+    const want = backStack.length;
+    if (want > SD_HIST.depth) {
+      for (let k = SD_HIST.depth + 1; k <= want; k++) { try { history.pushState({ sd: k }, ''); } catch (e) { return; } }
+      SD_HIST.depth = want;
+    } else if (want < SD_HIST.depth) {
+      const n = SD_HIST.depth - want;
+      SD_HIST.depth = want;
+      SD_HIST.skip++;
+      try { history.go(-n); } catch (e) { SD_HIST.skip--; }
+    }
+  }, 0);
+}
+(function sdHistInit() {
+  const touch = 'ontouchstart' in window;
+  const standalone = !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches));
+  if (!touch || standalone) return;
+  SD_HIST.on = true;
+  try { history.replaceState({ sd: 0 }, ''); } catch (e) { SD_HIST.on = false; return; }
+  // Every push / pop of the stack re-syncs (length = 0 sites call sdHistSync themselves).
+  const P = backStack.push, Q = backStack.pop;
+  backStack.push = function () { const r = P.apply(this, arguments); sdHistSync(); return r; };
+  backStack.pop = function () { const r = Q.apply(this, arguments); sdHistSync(); return r; };
+  window.addEventListener('popstate', e => {
+    const at = (e.state && typeof e.state.sd === 'number') ? e.state.sd : 0;
+    if (SD_HIST.skip) { SD_HIST.skip--; return; }      // our own history.go
+    if (at >= SD_HIST.depth) {                          // forward: there is no forward in the app
+      SD_HIST.depth = at; sdHistSync(); return;
+    }
+    let steps = SD_HIST.depth - at;
+    SD_HIST.depth = at;
+    window._sdEdgeBack = true;
+    try { while (steps-- > 0 && backStack.length) window.goBack(); }
+    finally { setTimeout(() => { window._sdEdgeBack = false; }, 0); }
+  });
+})();
 window.goBack = function (fallbackId) {
   sdHaptic(8);                                     // every Back ticks (0.20) — a no-op outside a tap
   const snap = backStack.pop();
@@ -1901,6 +1957,7 @@ window.plnewDelete = function () {
   // Not goBack(): the recorded location may be the page of the playlist that no
   // longer exists. The wall is the only sensible place to land.
   backStack.length = 0;
+  sdHistSync();
   navigate('playlists', 'back');
 };
 
@@ -16387,6 +16444,8 @@ function sdShowPrev(view, el) {
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => { if ('ontouchstart' in window) sdPrevSheet(); });
 (function sdEdgeBack() {
   if (!('ontouchstart' in window)) return;
+  // In a browser tab the system's own back swipe drives Back (SD_HIST); two at once went back twice.
+  if (typeof SD_HIST !== 'undefined' && SD_HIST.on) return;
   /* THE PAGE FOLLOWS THE FINGER (csharpdeveloper, Eric 2026-11-18: "for the
      swipe back function can u make it so u actually swipe the screen back like
      tiktok not this threshold with the back after"). The bubble is gone: a
