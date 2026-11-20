@@ -361,7 +361,8 @@
   // The picks the current mode deals from.
   const activePicks = () => DS.mode === 'genres' ? DS.genres : DS.mode === 'foryou' ? tasteGenres() : [];
   const genreLabel = () => DS.mode === 'genres' && DS.genres.length
-    ? DS.genres[0] + (DS.genres.length > 1 ? ' +' + (DS.genres.length - 1) : '') : 'For You';
+    ? DS.genres[0] + (DS.genres.length > 1 ? ' +' + (DS.genres.length - 1) : '')
+    : DS.mode === 'all' ? 'Everything' : 'For You';
 
   /* ── Deezer album id ──────────────────────────────────────────────────────
      Uses app.js's sdDzAlbumId when the build has it; otherwise its own match:
@@ -440,12 +441,14 @@
              experiences there" - Comments and Player (beta) sit where the X was;
              the nav is the way out now. No backticks: template literal. -->
         <div class="ds-topl">
-          <button class="ds-modebtn" aria-label="Comments mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('qs')">${ICO.quote}<span>Comments</span></button>
-          <button class="ds-modebtn" aria-label="Player mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('cp')">${ICO.disc}<span>Player</span></button>
+          <!-- csharpdeveloper (Eric 11-20): the genre pill leads, labelled with
+               what the feed deals (For You / a genre / Everything) so people see
+               it is a choice; Player is off for now, Comments is Lyrics mode. -->
+          <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}<span>${esc(genreLabel())}</span></button>
         </div>
         <span class="ds-credit">Previews by Deezer</span>
         <div class="ds-topr">
-        <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}</button>
+          <button class="ds-modebtn" aria-label="Lyrics mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('qs')">${ICO.quote}<span>Lyrics</span></button>
         </div>
       </div>
       <div class="ds-scroll"></div>
@@ -1239,7 +1242,9 @@
   function paintModeBtns() {
     if (!DS.root) return;
     const fy = DS.root.querySelector('.ds-fybtn'); if (fy) fy.classList.toggle('on', DS.mode === 'foryou');
-    DS.root.querySelector('.ds-genbtn').classList.toggle('on', DS.mode === 'genres');
+    const gb = DS.root.querySelector('.ds-genbtn');
+    gb.classList.toggle('on', DS.mode === 'genres');
+    const gl = gb.querySelector('span'); if (gl) gl.textContent = genreLabel();
   }
   // Deal the feed for the current mode. A thin shelf asks Deezer (or the cache)
   // first, behind a loader; a newer deal wins over a slow older one.

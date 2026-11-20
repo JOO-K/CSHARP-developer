@@ -22,6 +22,12 @@
 > a cover (`lastTap` snapshot; Swipe / Comments / Player glide from their CD).
 > Headless check: puppeteer-core in the scratchpad (`pt/run.js`, `pt/back.js`).
 
+> **SWIPE TOP BAR (2026-11-20)** — Eric: the Player button is off for now and
+> Comments is called **Lyrics** (still `sdDoomBeta('qs')`, now top RIGHT). The
+> genres button moved top LEFT and carries its label — For You / "Rock +1" /
+> Everything (`genreLabel`, repainted in `paintModeBtns`) — because nobody knew
+> the icon was a genre picker. Credit "Previews by Deezer" back in the middle.
+
 > ## ⚠️ THIS IS **0.20** — THE ROOT OF THE REPO, ON `main`, LIVE (2026-10-13 → )
 > Eric: "lets try updating this version to the live and call it .20". 0.14b
 > plus the work below, renamed and pushed. The last committed 0.14b is frozen

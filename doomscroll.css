@@ -430,3 +430,11 @@ html.sd-reduce-motion .ds-disc, html.sd-reduce-motion .ds-fx { animation: none !
 /* the credit moves right, beside Genres, to clear the mode pills */
 .ds-credit { left: auto; right: 54px; transform: none; top: 23px; }
 .ds-modebtn { padding: 0 10px 0 8px; font-size: 11.5px; gap: 5px; }
+
+/* 11-20 (Eric): genres pill on the LEFT with its label (For You / a genre /
+   Everything), Lyrics mode on the right, credit back in the middle. */
+.ds-genbtn {
+  display: inline-flex; align-items: center; gap: 6px; width: auto; max-width: 140px;
+  padding: 0 12px 0 9px; font: 700 12px/1 var(--font-main);
+}
+.ds-credit { left: 50%; right: auto; transform: translateX(-50%); top: 23px; }
