@@ -1,0 +1,129 @@
+/* ASSETS panel (assets.js) — dev only, `?tools` on desktop. Reuses the dev
+   box's .db-* chrome; floats over the stage's right side so the phone stays
+   clickable while it records. */
+#assetbox {
+  position: absolute; top: 14px; right: 14px; bottom: 14px; z-index: 75;
+  width: min(560px, 46vw);
+  display: flex; flex-direction: column;
+  background: var(--vsurface);
+  border: 1px solid var(--vborder); border-radius: 10px;
+  box-shadow: 0 10px 34px rgba(0,0,0,0.5);
+  font-size: 11px; color: var(--vtext);
+  overflow: hidden;
+}
+#assetbox[hidden] { display: none; }
+#assetbox .db-hd { gap: 8px; }
+#assetbox .db-title { margin-right: auto; }
+.ab-count { color: var(--vdim); font-size: 10px; }
+.ab-n { color: var(--vdim); font-size: 9.5px; margin-left: 2px; }
+.ab-bar { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--vborder); }
+.ab-bar .db-btn { flex: 0 0 auto; }
+.ab-q, .ab-sel {
+  background: var(--vbg); border: 1px solid var(--vborder); border-radius: 6px;
+  color: var(--vtext); font: inherit; font-size: 11px; padding: 5px 8px;
+}
+.ab-q { flex: 1; min-width: 0; }
+.ab-q:focus { outline: none; border-color: #404040; }
+.ab-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 10px 12px; }
+.ab-empty { padding: 24px 4px; text-align: center; line-height: 1.6; }
+.ab-grp {
+  margin: 14px 0 7px; color: var(--vdim);
+  font-size: 10px; letter-spacing: .4px; text-transform: uppercase;
+}
+.ab-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+.ab-cell {
+  position: relative; min-width: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 12px 4px 7px; cursor: pointer;
+  background: #111114; border: 1px solid var(--vborder); border-radius: 8px;
+  color: var(--vtext); font: inherit;
+}
+.ab-cell:hover { border-color: #3a3a3a; background: #17171b; }
+.ab-cell.on { border-color: var(--vaccent); background: #1b1c22; }
+.ab-ico { width: 32px; height: 32px; display: grid; place-items: center; color: #e8e8e8; }
+.ab-ico > svg { max-width: 100%; max-height: 100%; width: 100%; height: 100%; overflow: visible; }
+.ab-glyph { font-size: 24px; line-height: 1; }
+.ab-img { width: 48px; height: 32px; background: #222 center / contain no-repeat; border-radius: 3px; }
+.ab-nm { width: 100%; font-size: 9.5px; color: #9a9a9a; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-c { position: absolute; top: 4px; right: 6px; font-size: 9px; color: var(--vdim); }
+.ab-font {
+  display: block; width: 100%; text-align: left; cursor: pointer; margin-bottom: 4px;
+  padding: 9px 10px; background: #111114; border: 1px solid var(--vborder); border-radius: 8px;
+  color: var(--vtext); font: inherit;
+}
+.ab-font:hover { border-color: #3a3a3a; }
+.ab-font.on { border-color: var(--vaccent); }
+.ab-spec { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f0f0f0; line-height: 1.25; }
+.ab-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 5px; color: #8a8a8a; font-size: 10px; }
+.ab-meta .ab-c { position: static; white-space: nowrap; }
+.ab-decl { margin: 0 0 8px; color: #8a8a8a; font-size: 10px; }
+.ab-decl summary { cursor: pointer; color: var(--vdim); }
+.ab-decl div { padding: 2px 0 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#assetbox code { font-family: ui-monospace, Menlo, monospace; font-size: 9.5px; color: var(--vaccent); }
+
+/* the selected item: what it is, where it's used, export */
+.ab-detail {
+  flex: 0 0 auto; max-height: 44%; display: flex; flex-direction: column;
+  border-top: 1px solid var(--vborder); background: #101013;
+}
+.ab-detail[hidden] { display: none; }
+.ab-dhead { display: flex; gap: 12px; align-items: flex-start; padding: 10px 10px 8px; }
+.ab-dhead > div { flex: 1; min-width: 0; }
+.ab-dhead .db-x { margin-left: auto; }
+.ab-big { flex: 0 0 64px; width: 64px; height: 64px; display: grid; place-items: center;
+  background: #18181c; border: 1px solid var(--vborder); border-radius: 8px; color: #fff; }
+.ab-big > svg { width: 40px; height: 40px; overflow: visible; }
+.ab-big.ab-glyph { font-size: 36px; }
+.ab-big.ab-img { background-size: contain; }
+.ab-dname { font-size: 13px; font-weight: 600; margin-bottom: 3px; word-break: break-word; }
+.ab-dsub { color: #8a8a8a; font-size: 10px; margin-top: 2px; word-break: break-word; }
+.ab-uses { overflow-y: auto; padding: 0 10px 6px; }
+.ab-scr { margin: 6px 0 3px; color: var(--vdim); font-size: 9.5px; letter-spacing: .4px; text-transform: uppercase; }
+.ab-use {
+  display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left;
+  background: none; border: none; border-radius: 4px; padding: 3px 6px; cursor: pointer;
+  color: #c4c4c4; font: inherit; font-size: 10.5px;
+}
+.ab-use:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.ab-use .ab-c { position: static; }
+.ab-dacts { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--vborder); }
+.ab-dacts .db-btn { text-align: center; text-decoration: none; }
+#assetbox .db-foot { flex-wrap: wrap; align-items: center; }
+.ab-chk { color: #9a9a9a; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+/* click-to-find ring over the phone */
+.ab-ring {
+  position: fixed; z-index: 9999; pointer-events: none; opacity: 0;
+  border: 2px solid #ff3b8d; border-radius: 6px; box-shadow: 0 0 0 4px rgba(255,59,141,0.25);
+}
+.ab-ring.go { animation: abRing 1.6s ease-out forwards; }
+@keyframes abRing { 0%, 70% { opacity: 1; } 100% { opacity: 0; } }
+
+/* BY COMPONENT: page → component card → one row per text part */
+.ab-page {
+  display: flex; align-items: baseline; gap: 8px; width: 100%;
+  position: sticky; top: -4px; z-index: 2; margin: 8px 0 6px; padding: 8px 2px;
+  background: var(--vsurface); border: none; border-bottom: 1px solid var(--vborder);
+  color: var(--vtext); font: inherit; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer;
+}
+.ab-page::before { content: '▸'; color: var(--vdim); width: 10px; }
+.ab-page.open::before { content: '▾'; }
+.ab-comp { margin: 0 0 10px; border: 1px solid var(--vborder); border-radius: 8px; background: #0e0e11; overflow: hidden; }
+.ab-chd {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  padding: 6px 10px; background: #15151a; border-bottom: 1px solid var(--vborder);
+  color: #dcdcdc; font-size: 10.5px; font-weight: 600; text-transform: capitalize;
+}
+.ab-chd code { font-weight: 400; text-transform: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-comp .ab-grid { padding: 8px; }
+.ab-frow {
+  display: grid; grid-template-columns: 92px minmax(0, 1fr); column-gap: 10px; row-gap: 3px;
+  width: 100%; padding: 7px 10px; text-align: left; cursor: pointer;
+  background: none; border: none; border-top: 1px solid #1b1b20; color: var(--vtext); font: inherit;
+}
+.ab-chd + .ab-frow { border-top: 0; }
+.ab-frow:hover { background: #15151a; }
+.ab-frow.on { background: #1b1c22; box-shadow: inset 2px 0 var(--vaccent); }
+.ab-part { grid-row: span 2; align-self: center; color: #9a9a9a; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ab-fmeta { color: #7a7a7a; font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

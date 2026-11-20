@@ -21,6 +21,38 @@
 > and AUTO-glides any `openAlbumPage` / `openArtistPageFor` that follows a tap on
 > a cover (`lastTap` snapshot; Swipe / Comments / Player glide from their CD).
 > Headless check: puppeteer-core in the scratchpad (`pt/run.js`, `pt/back.js`).
+>
+> **ASSETS PANEL (2026-11-19, dev only)** — `assets.js` + `assets.css`, an
+> **Assets** button beside Feedback that exists only with `?tools` on desktop.
+> Inventory of every icon (svg + CSS data-URI), glyph-as-icon, UI image and
+> text style, with where each is used (screen + class path; click a use to ring
+> it on the phone). Sources come from fetching the local JS/CSS (svg literals
+> with their const name and file:line, SD_LINE_ICONS, font-family rules); usage
+> is recorded live by a MutationObserver while you click around (`sd-assets-v1`),
+> and **Sweep screens** visits every SCREENS entry. Exports paste into Figma:
+> Copy SVG, the icon sheet (one named group per icon, currentColor → black),
+> and a type specimen SVG (one text layer per style) + CSV.
+> Since 11-19 later: shows on LOCAL addresses without `?tools`; only icons seen
+> on screen (a "show unused" box for the rest); the fake status bar / island /
+> home indicator are excluded. **By component** (default view): every use is
+> `Page — component — part` (`sd-assets-v2`). Page = the screen, or Album page /
+> Artist page read off the Home shell's `--album` / `--artist` classes (they're
+> states, not screens — `seen` is a WeakMap el → page so a class flip rescans,
+> and the observer watches `.app-screen` class changes). Component =
+> `componentOf`: first ancestor ≤60% of the screen tall with 2+ children, plus a
+> repeated item holding 2+ texts (credit row, song row). Ordered top-to-bottom
+> by `pageY`; the Figma specimen in this view is laid out page → component →
+> part. Sweep also opens the album page and the artist page.
+
+> **BIG-PHONE TEXT TEST + SIZES (2026-11-20)** — `fontbump.js`: on `html.sd-fontbump`
+> every px font-size in app/doomscroll/quotes/player.css (+ `#devbox-live`) is
+> rewritten in place: +3px for 15px+ or a title/album/artist/name/heading
+> selector, +2px otherwise (Eric tried +1/+2 = invisible, +5/+3 = too much).
+> JS fit-to-box inline sizes are left alone. On with `?bigtext=bump` on a 420px+
+> phone (sticks; `?bigtext=scale` = the old viewport zoom) or `&fontbump`
+> anywhere. compare-phones.html has a 4th phone for it, and a **Sizes** button
+> beside Assets (made in assets.js, same gate) opens that page. Profile
+> favourites wheel `PROF_ARC_DEG` back to 24 (tighter, rounder).
 
 > **SWIPE TOP BAR (2026-11-20)** — Eric: the Player button is off for now and
 > Comments is called **Lyrics** (still `sdDoomBeta('qs')`, now top RIGHT). The

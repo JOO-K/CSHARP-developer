@@ -8,7 +8,9 @@
      side by side, at TRUE relative size (iPhones all draw a CSS px at about the
      same physical size, so a Pro Max is just more px, not bigger px). The third
      phone previews index.html's big-phone scale: the app lays out at 440/s
-     wide and is scaled ×s, exactly what the viewport meta does on the device. -->
+     wide and is scaled ×s, exactly what the viewport meta does on the device.
+     The fourth (11-20) keeps the real 440 layout and only grows the type
+     (fontbump.js: titles / 15px+ +3px, other text +2px). -->
 <style>
   :root { --bg: #0c0c0f; --ink: #e8e2d6; --dim: rgba(232,226,214,.55); --line: rgba(255,255,255,.12); --acc: #e8a83c; }
   * { box-sizing: border-box; }
@@ -41,6 +43,7 @@
     { name: 'Your iPhone', sub: '15 / 16 Pro · 393 × 852', w: 393, h: 852, scaled: false },
     { name: 'Pro Max, today', sub: '16 Pro Max · 440 × 956', w: 440, h: 956, scaled: false },
     { name: 'Pro Max, larger', sub: '440 × 956 · lays out at', w: 440, h: 956, scaled: true },
+    { name: 'Pro Max, bigger text', sub: '440 × 956 · titles +3px, other text +2px', w: 440, h: 956, scaled: false, bump: true },
   ];
   var SCREENS = [['home', 'Home'], ['swipe', 'Swipe'], ['wall', 'Trending'], ['profile', 'Profile'], ['notifications', 'Notifications']];
   var cur = 'home', row = document.getElementById('row'), sIn = document.getElementById('s');
@@ -73,7 +76,7 @@
         if (!swipe) return;
         (function go() { var vis = [].find.call(w.document.querySelectorAll('.s-wall2'), function (e) { return e.offsetParent; }); if (w.sdDoomOpen && vis) w.sdDoomOpen(vis.firstElementChild); else if (n++ < 40) setTimeout(go, 250); })();
       };
-      x.f.src = 'index.html?screen=' + (swipe ? 'wall' : cur) + '&norec' + (document.getElementById('kb').checked ? '&kbsim' : '');
+      x.f.src = 'index.html?screen=' + (swipe ? 'wall' : cur) + '&norec' + (x.p.bump ? '&fontbump' : '') + (document.getElementById('kb').checked ? '&kbsim' : '');
     });
     document.querySelectorAll('#screens button').forEach(function (b) { b.classList.toggle('on', b.dataset.s === cur); });
   }

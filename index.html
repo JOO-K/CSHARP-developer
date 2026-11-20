@@ -42,6 +42,16 @@
       var w = Math.min(screen.width, screen.height);
       var phone = window.matchMedia('(pointer: coarse)').matches && w < 768;
       if (phone && w >= 420) document.documentElement.classList.add('sd-bigphone');   // Swipe's rail reads this (doomscroll.css): scaled, the layout is under 420
+      // FONT BUMP test (11-20, fontbump.js): ?bigtext=bump grows the type (+3px titles / +2px other)
+      // instead of zooming (sticks; ?bigtext=scale is the zoom again). &fontbump
+      // forces it on any device (compare-phones.html's 4th phone).
+      var bq = /[?&]bigtext=(bump|scale)/.exec(location.search), bk = 'sd-bigtext', bm;
+      if (bq) { bm = bq[1]; try { localStorage.setItem(bk, bm); } catch (e) {} }
+      else { try { bm = localStorage.getItem(bk); } catch (e) {} }
+      if (/[?&]fontbump/.test(location.search) || (bm === 'bump' && phone && w >= 420)) {
+        document.documentElement.classList.add('sd-fontbump');
+        return;   // type grows instead; no viewport zoom
+      }
       if (!phone || w < 420 || s <= 1) return;
       var m = document.querySelector('meta[name=viewport]');
       m.setAttribute('content', 'width=' + Math.round(w / s) + ', initial-scale=' + s + ', maximum-scale=' + s + ', user-scalable=no');
@@ -72,6 +82,7 @@
   <link rel="stylesheet" href="doomscroll.css?v=38">
   <link rel="stylesheet" href="quotes.css?v=14">
   <link rel="stylesheet" href="player.css?v=14">
+  <link rel="stylesheet" href="assets.css?v=2">
 </head>
 <body>
 
@@ -343,6 +354,7 @@
   <!-- SD_DOTS — the brand dot-matrix generator. Must load before screens.js:
        the home screen's static markup calls sdPet() as it parses. Design new
        patterns in dot-lab.html (toolbar → ◌ Dots). -->
+  <script src="fontbump.js?v=3"></script>
   <script src="belt.js?v=1"></script>
   <script src="dots.js?v=1"></script>
   <script src="data.js?v=144"></script>
@@ -352,7 +364,7 @@
   <script src="screens.js?v=408"></script>
   <!-- 0.14b: anime.js draws the logo between onboarding and home (sdHomeIntro, end of app.js). -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"></script>
-  <script src="app.js?v=536"></script>
+  <script src="app.js?v=538"></script>
   <!-- Quick share — needs app.js first (computeAlbumColors, albumDraft, shellAlbum). -->
   <!-- Festival tags (from csharpuserlive, 2026-10-23) — wraps profTags /
        profTagsHtml / pfeTagChips / openProfEditor, so after app.js. -->
@@ -366,6 +378,8 @@
        nothing in app.js, and only runs when the toolbar button is pressed. -->
   <script src="roadmap.js?v=8"></script>
   <script src="guides.js?v=1"></script>
+  <!-- Assets: icon / glyph / image / font inventory, dev only (?tools, desktop). -->
+  <script src="assets.js?v=8"></script>
   <!-- Patch notes + Feedback — the user-testing chrome. Loads last; only the
        two toolbar buttons call into it. -->
   <!-- The shared-element transition: a tapped cover or face glides into its

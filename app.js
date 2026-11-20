@@ -639,7 +639,7 @@ function captureScreenSnap() {
    the finger. Phone build only (#mobile-content). */
 const SD_PREV_SCROLLERS = '.v3-body, .sds-body, .ds-scroll, .qs-scroll, .wall2-scroll, .wb-rail, .v3-aa-row, .v3-feed-items';
 function sdKeepPage() {
-  if (typeof SD_HIST !== 'undefined' && SD_HIST.on) return null;   // a browser tab: Safari's swipe shows its own snapshot
+  if (typeof SD_HIST !== 'undefined' && SD_HIST.on && !SD_HIST.own) return null;   // the system's swipe shows its own snapshot
   const host = document.getElementById('mobile-content');
   if (!host || !host.getBoundingClientRect().width) return null;
   const scr = [...host.children].filter(e => e.classList && e.classList.contains('app-screen') && !e.classList.contains('fade-exit')).pop();
@@ -806,7 +806,15 @@ window.sdNavTab = function (id) {
    sdHistSync reconciles by COUNT after every change, so the two can't drift.
    In the home-screen app there is no system swipe: history stays untouched and
    our own drag (sdEdgeBack) is the gesture. In a tab, sdEdgeBack stands down. */
-const SD_HIST = { on: false, depth: 0, skip: 0, t: 0 };
+const SD_HIST = { on: false, own: false, depth: 0, skip: 0, t: 0 };
+/* ONE BACK PER SWIPE (11-18, round 2: "everyone is testing thru the home screen
+   icon" — and there, too, a swipe went back twice). iOS can have its own back
+   swipe in a home-screen app as well, so history is mirrored there too, and an
+   edge swipe carries a token (SD_EDGE): from the touch until 1.5s after the
+   lift, only the FIRST back — the system's popstate or our drag — acts.
+   The first time the system's own back shows up during our swipe, the phone is
+   remembered (sd-sys-swipe) and our drag stands down for good (SD_HIST.own). */
+window.SD_EDGE = null;
 function sdHistSync() {
   if (!SD_HIST.on || SD_HIST.t) return;
   SD_HIST.t = setTimeout(() => {
@@ -826,7 +834,9 @@ function sdHistSync() {
 (function sdHistInit() {
   const touch = 'ontouchstart' in window;
   const standalone = !!(navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches));
-  if (!touch || standalone) return;
+  if (!touch) return;
+  let sys = false; try { sys = localStorage.getItem('sd-sys-swipe') === '1'; } catch (e) {}
+  SD_HIST.own = standalone && !sys;                    // our drag: the home-screen app, unless iOS swipes there itself
   SD_HIST.on = true;
   try { history.replaceState({ sd: 0 }, ''); } catch (e) { SD_HIST.on = false; return; }
   // Every push / pop of the stack re-syncs (length = 0 sites call sdHistSync themselves).
@@ -840,6 +850,13 @@ function sdHistSync() {
       SD_HIST.depth = at; sdHistSync(); return;
     }
     let steps = SD_HIST.depth - at;
+    const E = window.SD_EDGE;
+    if (E && Date.now() < E.until) {                    // the SYSTEM went back during an edge swipe
+      if (SD_HIST.own) { SD_HIST.own = false; try { localStorage.setItem('sd-sys-swipe', '1'); } catch (e) {} }
+      if (typeof window.__sdEdgeAbort === 'function') window.__sdEdgeAbort();
+      if (E.used) { SD_HIST.depth = at; sdHistSync(); return; }   // our drag already went back: realign, no second Back
+      E.used = true; steps = 1;
+    }
     SD_HIST.depth = at;
     window._sdEdgeBack = true;
     try { while (steps-- > 0 && backStack.length) window.goBack(); }
@@ -14360,7 +14377,10 @@ window.profFavSync = function (rail) {
    and a tight wheel tipped their bottom corners down awkwardly — "a larger
    circle radius". R = spacing/θ, so roughly double the radius, half the drop;
    the rail's 13% bottom padding has more than enough room. */
-const PROF_ARC_DEG = 13;     // how far a disc has turned once it is one slot out
+/* 13 → 24 again (Eric 11-20: "less large of a circular ring and more tight so
+   its more round like we had it before"). The rail's 13% bottom padding was
+   sized for 24° with 46% discs, so the drop still fits. */
+const PROF_ARC_DEG = 24;     // how far a disc has turned once it is one slot out
 const PROF_ARC_DIM = 0.55;   // opacity given up over that same slot
 const PROF_ARC_SHR = 0.24;   // and scale — a touch deeper, so the swing reads as
                              // going AWAY from you and not merely downward
@@ -16444,8 +16464,7 @@ function sdShowPrev(view, el) {
 (window.requestIdleCallback || (f => setTimeout(f, 1500)))(() => { if ('ontouchstart' in window) sdPrevSheet(); });
 (function sdEdgeBack() {
   if (!('ontouchstart' in window)) return;
-  // In a browser tab the system's own back swipe drives Back (SD_HIST); two at once went back twice.
-  if (typeof SD_HIST !== 'undefined' && SD_HIST.on) return;
+  const ownDrag = () => !(typeof SD_HIST !== 'undefined' && SD_HIST.on && !SD_HIST.own);
   /* THE PAGE FOLLOWS THE FINGER (csharpdeveloper, Eric 2026-11-18: "for the
      swipe back function can u make it so u actually swipe the screen back like
      tiktok not this threshold with the back after"). The bubble is gone: a
@@ -16516,6 +16535,8 @@ function sdShowPrev(view, el) {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     if (t.clientX > EDGE) return;
+    window.SD_EDGE = { used: false, until: Infinity };  // this swipe's one Back (see ONE BACK PER SWIPE)
+    if (!ownDrag()) return;                             // the system's swipe drives it here
     const tg = target(e.target);
     if (tg) g = Object.assign(tg, { x0: t.clientX, y0: t.clientY, on: false, dx: 0, lx: t.clientX, lt: Date.now(), v: 0 });
   }, { passive: true, capture: true });
@@ -16537,11 +16558,19 @@ function sdShowPrev(view, el) {
     placePrev(g, g.dx);
   }, { passive: false, capture: true });
   const commits = d => d.dx >= d.w * COMMIT_F || (d.dx > 30 && d.v > FLICK);
+  // The system went back mid-swipe (SD_HIST's popstate): put our drag down where it is.
+  window.__sdEdgeAbort = () => { if (!g) return; const d = g; g = null; if (d.on) { drop(d); if (d.prev) { d.prev.remove(); d.prev = null; } } };
   const end = e => {
+    if (window.SD_EDGE && window.SD_EDGE.until === Infinity) window.SD_EDGE.until = Date.now() + 1500;
     if (!g) return;
     const d = g; g = null;
     if (!d.on) return;
+    if (e.type === 'touchend' && commits(d) && window.SD_EDGE && window.SD_EDGE.used) {   // the system already went back
+      drop(d); if (d.prev) { d.prev.remove(); d.prev = null; }
+      return;
+    }
     if (e.type === 'touchend' && commits(d)) {
+      if (window.SD_EDGE) window.SD_EDGE.used = true;
       try { sdHaptic(8); } catch (x) {}
       e.preventDefault();                                // the lifted finger must not also tap what's under it
       setX(d.el, d.w, OUT_MS);                           // off to the right…
