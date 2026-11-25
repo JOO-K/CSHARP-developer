@@ -511,3 +511,38 @@ html.sd-bigphone .ds-rail-svcs { gap: 6px; }
 html.sd-bigphone .ds-rbtn.ds-orbit svg { width: 27px; height: 27px; }
 html.sd-bigphone .ds-rbtn.ds-orbit { font-size: 8.5px; }
 @container (min-width: 420px) { .ds-rbtn.ds-orbit svg { width: 27px; height: 27px; } .ds-rbtn.ds-orbit { font-size: 8.5px; } }
+
+/* ICONS ONLY, CLOSER TO THE WALL (csharpuser, Eric 11-24: "take out the text
+   underneath the icons and push them closer to the wall"). The labels go (each
+   button keeps its aria-label); alignRail sets the column 6px off the wall. */
+.ds-rbtn.ds-orbit > span { display: none; }
+
+/* COUNTS AT BOTH ENDS (Eric 11-24): the like count always shows over the heart
+   (not only once you've liked it) and the review count sits under Reviews,
+   the last button, so the column is capped top and bottom. */
+/* (later 11-24: "not show the numbers until I press them" — the like count is
+   back to showing once liked, the review count once Reviews is tapped) */
+.ds-rcount { opacity: 0; transition: opacity .2s; }
+.ds-cmt.on .ds-rcount { opacity: 1; }
+.ds-rcount {
+  font: 700 11px/1 var(--font-main); color: #fff; white-space: nowrap; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0,0,0,.5);
+}
+
+/* + ADD REVIEW in the reviews sheet's top right (Eric 11-24), where "Album page ›" was. */
+.ds-radd {
+  width: 32px; height: 32px; border-radius: 50%; border: 0; padding: 0; cursor: pointer;
+  display: grid; place-items: center; background: rgba(255,255,255,.12); color: #fff;
+}
+.ds-radd:active { transform: scale(.92); }
+.ds-radd svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
+
+/* GENRES LEFT, MODES RIGHT AGAIN (csharpuser, Eric 11-24): the pill back at the
+   top left, the Lyrics mode button top right; no Lyrics row in the Genres sheet. */
+.ds-top { justify-content: space-between; }
+
+/* REVIEW COUNT 3px LOWER, AND VIOLET ONCE YOU'VE REVIEWED (Eric 11-24). Violet is
+   the one colour the rail hadn't used (pink like, blue listened, gold later). */
+.ds-rcount { margin-top: 3px; }
+.ds-cmt.mine svg { stroke: #a78bfa; }
+.ds-cmt.mine .ds-rcount { color: #a78bfa; }

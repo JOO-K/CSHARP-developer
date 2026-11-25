@@ -443,8 +443,14 @@
         <!-- csharpversioncontrol (Eric 11-23): the Deezer credit is gone, the
              genre pill sits top right, and Lyrics mode moved inside the
              Genres sheet so the top bar stays quiet. -->
-        <div class="ds-topr">
+        <!-- csharpuser (Eric 11-24): "genres in the upper left and the modes in
+             the upper right again instead of having modes inside genres". The
+             Deezer credit stays gone. -->
+        <div class="ds-topl">
           <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}<span>${esc(genreLabel())}</span></button>
+        </div>
+        <div class="ds-topr">
+          <button class="ds-modebtn" aria-label="Lyrics mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('qs')">${ICO.quote}<span>Lyrics</span></button>
         </div>
       </div>
       <div class="ds-scroll"></div>
@@ -455,7 +461,8 @@
           <div class="ds-gnub" onclick="sdDoomReviewsClose()"></div>
           <div class="ds-rhd">
             <div class="ds-rhd-t"><b>Reviews</b><span class="v3-rev-count"></span></div>
-            <button class="ds-rpage" onclick="event.stopPropagation(); sdDoomReviewsPage()">Album page ›</button>
+            <!-- + Add review in place of "Album page ›" (Eric 11-24); sdDoomReviewsPage is kept, unused. -->
+            <button class="ds-radd" aria-label="Add a review" onclick="event.stopPropagation(); sdDoomReviewAdd(this)">${ICO.plus}</button>
           </div>
           <div class="ds-rbody"><div class="v3-rev-list"></div></div>
         </div>
@@ -470,7 +477,6 @@
         <div class="ds-gpanel" onclick="event.stopPropagation()">
           <div class="ds-gnub"></div>
           <div class="ds-ghd"><b>Genres</b><button class="ds-gclear" onclick="sdDoomGenreClear()">Show everything</button></div>
-          <button class="ds-glyr" onclick="sdDoomGenreClose(); sdDoomBeta('qs')">${ICO.quote}<span><b>Lyrics mode</b><small>Albums with their lyrics, line by line</small></span><i>›</i></button>
           <div class="ds-glist"></div>
           <button class="ds-ggo" onclick="sdDoomGenreCommit()" hidden>Pick genres</button>
         </div>
@@ -519,8 +525,9 @@
              button … put reviews and share on the right side below listened and
              later with reviews above the share"). The left rail and its Review
              (+) button are gone; sdDoomReview is kept, unused. -->
-        <button class="ds-rbtn ds-cmt" aria-label="Reviews and comments" onclick="event.stopPropagation(); sdDoomReviews(${i})">${ICO.cmt}<span>Reviews</span></button>
         <button class="ds-rbtn ds-share" aria-label="Share" onclick="event.stopPropagation(); sdDoomShare(this, ${i})">${ICO.share}<span>Share</span></button>
+        <!-- Reviews last, its count under the icon (Eric 11-24) — the like count over the heart caps the other end. -->
+        <button class="ds-rbtn ds-cmt${(d.text || '').trim() ? ' mine' : ''}" aria-label="Reviews and comments" onclick="event.stopPropagation(); sdDoomReviews(${i})">${ICO.cmt}<span>Reviews</span><b class="ds-rcount">${reviewsN(i)}</b></button>
         <div class="ds-rail-svcs"><span class="ds-rail-sep"></span>${svc}</div>
       </div>`;
   }
@@ -594,24 +601,26 @@
     /* Like · Listened · Later are centred on the CD (round 25), so both rails
        sit beside the disc; the streaming icons and the left rail are then
        lined up from there, as before. */
-    /* TWO COLUMNS, SAME DISTANCE FROM THE WALLS (csharpversioncontrol, Eric
-       11-23; a ring round the disc was tried and dropped). The CD is centred;
-       Like · Listened · Later stand in a straight column on the right and
-       Reviews · Share on the left, level with Like and Later. Both columns'
-       centres sit EDGE px in from their side of the card, so the two sides
-       mirror. If a disc would crowd the columns, the disc shrinks
-       (max-width; placeFixCd, queued above, follows). Buttons are absolute
-       inside .ds-rail (which only flows the streaming icons now). */
+    /* (11-23 two wall-aligned columns, Reviews · Share on the left — replaced
+       11-24 by the one right-hand column below.) */
     const rail = card.querySelector('.ds-rail'), cdEl = card.querySelector('.ds-cd');
     if (rail && cdEl) {
-      const SPOTS = [['.ds-fav', 'R', -1], ['.ds-listened', 'R', 0], ['.ds-later', 'R', 1], ['.ds-cmt', 'L', -1], ['.ds-share', 'L', 1]];
+      /* ONE COLUMN ON THE RIGHT, AGAIN (csharpuser, Eric 11-24: "put all the
+         icons on the right side again with the top matching the top of the
+         cd"). Like · Listened · Later · Reviews · Share stand in one column
+         EDGE px in from the right wall; the first icon's top sits level with
+         the disc's top and each row follows at its natural pitch. The disc
+         stays centred and only shrinks if it would reach the column. */
+      const SPOTS = [['.ds-fav', 0], ['.ds-listened', 1], ['.ds-later', 2], ['.ds-share', 3], ['.ds-cmt', 4]];
+      const GAP = 14;                               // space between one icon and the next (no labels since 11-24)
       const k = card.getBoundingClientRect();
       let c = cdEl.getBoundingClientRect();
       if (c.height) {
         SPOTS.forEach(([sel]) => { const b = rail.querySelector(sel); if (b) b.classList.add('ds-orbit'); });   // measure at their column size
         const W = card.offsetWidth;
-        const half = Math.max(...SPOTS.map(([sel]) => { const b = rail.querySelector(sel); return b ? b.offsetWidth / 2 : 0; }));
-        const EDGE = half + 12;                     // wall → column centre, both sides
+        const btns = SPOTS.map(([sel]) => rail.querySelector(sel));
+        const half = Math.max(...btns.map(b => b ? b.offsetWidth / 2 : 0));
+        const EDGE = half + 10;                     // right wall → column centre: the icons sit 10px off the wall (11-24)
         const Rmax = W / 2 - EDGE - half - 8;       // the disc stops 8px short of the widest label
         cdEl.style.maxWidth = '';
         c = cdEl.getBoundingClientRect();
@@ -620,16 +629,24 @@
         rail.style.top = ((c.top - k.top) / scale0).toFixed(1) + 'px';
         const rr = rail.getBoundingClientRect();
         const railLeft = (rr.left - k.left) / scale0;
-        const cy = (c.top + c.height / 2 - rr.top) / scale0;
-        const STEP = Math.min(80, c.height / 2 / scale0 * 0.62);   // row pitch, kept inside the disc's height
-        SPOTS.forEach(([sel, side, row]) => {
-          const btn = rail.querySelector(sel), ico = btn && btn.querySelector('svg');
+        const top0 = (c.top - rr.top) / scale0;     // the disc's top, in the rail's px
+        const STEP = Math.max(...btns.map(b => { const v = b && b.querySelector('svg'); return v ? v.getBoundingClientRect().height / scale0 : 0; })) + GAP;   // icon to icon (Reviews' count doesn't stretch it)
+        SPOTS.forEach(([sel, row], n) => {
+          const btn = btns[n], ico = btn && btn.querySelector('svg');
           if (!btn || !ico) return;
-          const px = (side === 'R' ? W - EDGE : EDGE) - railLeft, py = cy + row * STEP;
           const ib = ico.getBoundingClientRect(), bb = btn.getBoundingClientRect();   // an <svg> has no offsetTop
-          btn.style.left = (px - btn.offsetWidth / 2).toFixed(1) + 'px';
-          btn.style.top = (py - ((ib.top - bb.top) + ib.height / 2) / scale0).toFixed(1) + 'px';
+          btn.style.left = (W - EDGE - railLeft - btn.offsetWidth / 2).toFixed(1) + 'px';
+          btn.style.top = (top0 - (ib.top - bb.top) / scale0 + row * STEP).toFixed(1) + 'px';
         });
+        /* CENTRED ON THE DISC (Eric 11-24: "center the icons with the verticality
+           of the cd"). The whole column — like count on top to review count at
+           the bottom — gets its middle on the disc's middle. */
+        const capT = btns[0] && btns[0].querySelector('svg'), capB = btns[4] && btns[4].querySelector('svg');   // icons only: the counts are hidden until pressed (11-24)
+        if (capT && capB) {
+          const mid = (capT.getBoundingClientRect().top + capB.getBoundingClientRect().bottom) / 2;
+          const dy = (c.top + c.height / 2 - mid) / scale0;
+          btns.forEach(b => { if (b) b.style.top = (parseFloat(b.style.top) + dy).toFixed(1) + 'px'; });
+        }
       }
     }
     const lr = card.querySelector('.ds-lrail'), lis = card.querySelector('.ds-listened'), rv = lr && lr.querySelector('.ds-cmt');
@@ -645,6 +662,9 @@
     const want = ol.getBoundingClientRect().top + (d.getBoundingClientRect().top - li.getBoundingClientRect().top);
     const cur = parseFloat(box.style.top) || parseFloat(getComputedStyle(box).top) || 0;
     box.style.top = (cur + (want - icon.getBoundingClientRect().top) / scale).toFixed(1) + 'px';
+    const sh = card.querySelector('.ds-share');   // never under the one column (11-24): start 14px below Share
+    if (sh) { const gap = icon.getBoundingClientRect().top - sh.getBoundingClientRect().bottom - 14 * scale;
+      if (gap < 0) box.style.top = (parseFloat(box.style.top) - gap / scale).toFixed(1) + 'px'; }
   }
   window.addEventListener('resize', () => {
     if (DS.scroller) DS.scroller.querySelectorAll('.ds-card').forEach(c => { if (c._prep) { fitTitle(c); alignRail(c); } });
@@ -1326,7 +1346,10 @@
     card.querySelector('.ds-likes').textContent = albumLikes(i);
     card.querySelector('.ds-listened').classList.toggle('on', !!d.listened);
     card.querySelector('.ds-later').classList.toggle('on', !!d.later);
-    card.querySelector('.ds-add').classList.toggle('on', d.rating > 0 || !!(d.text || '').trim());
+    /* Reviews turns violet once YOU've written one (Eric 11-24). (This line used to
+       toggle .ds-add, gone with the + button on 11-23 — the null threw and
+       stopped the score repainting.) */
+    card.querySelector('.ds-cmt').classList.toggle('mine', !!(d.text || '').trim());
     const sc = card.querySelector('.ds-score');
     sc.classList.toggle('is-mine', d.rating > 0);
     sc.innerHTML = scoreInner(a, d);
@@ -1334,6 +1357,10 @@
 
   /* The album's like count (round 24), shown over the heart once YOU like it.
      Mock like every count in the app: seeded off its review count, plus you. */
+  function reviewsN(i) {                          // the album's review count, as the app shows it everywhere (fmtRc)
+    const a = DS.list[i], n = (a && a.reviewCount) || 0;
+    return typeof window.fmtRc === 'function' ? window.fmtRc(n) : String(n);
+  }
   function albumLikes(i) {
     const a = DS.list[i];
     if (!a) return '';
@@ -1493,6 +1520,7 @@
     const panel = sh.querySelector('.ds-rpanel');
     panel._album = a;
     DS.rsheetI = i;
+    const rb = cardAt(i) && cardAt(i).querySelector('.ds-cmt'); if (rb) rb.classList.add('on');   // its count shows once pressed (11-24)
     populateReviewList(panel, 'popular');
     sh.querySelector('.ds-rbody').scrollTop = 0;
     sh.hidden = false;
@@ -1504,6 +1532,21 @@
     if (!sh || sh.hidden) return;
     sh.classList.remove('open');
     setTimeout(() => { if (!sh.classList.contains('open')) sh.hidden = true; }, 280);
+  };
+  /* + in the reviews sheet's top right (Eric 11-24): the log sheet for this
+     album opens over the reviews; once it closes the list is rebuilt, so a
+     review just written shows at the top. */
+  window.sdDoomReviewAdd = function (btn) {
+    const i = DS.rsheetI;
+    if (i == null) return;
+    window.sdDoomReview(btn, i);
+    const sh = DS.root && DS.root.querySelector('.ds-rsheet');
+    clearInterval(DS.rwatch);
+    DS.rwatch = setInterval(() => {
+      if (document.querySelector('.sd-log-overlay.open')) return;
+      clearInterval(DS.rwatch);
+      if (sh && !sh.hidden && DS.rsheetI === i && typeof populateReviewList === 'function') populateReviewList(sh.querySelector('.ds-rpanel'), 'popular');
+    }, 400);
   };
   window.sdDoomReviewsPage = function () {
     const i = DS.rsheetI;
