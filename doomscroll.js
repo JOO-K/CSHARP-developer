@@ -127,6 +127,7 @@
 
   const DS = {
     root: null, scroller: null, list: [], shown: 0, active: -1,
+    side: (() => { try { return localStorage.getItem('sd-doom-side') === 'left' ? 'left' : 'right'; } catch (e) { return 'right'; } })(),   // one-hand switch (11-25)
     audio: null, ctx: null, gain: null, an: null, bins: null, raf: 0, gen: 0, track: -1, obs: null, watch: null,
     // No volume control (round 14): a phone's own buttons set the level, so
     // touch devices play at full; desktop sits at 25%.
@@ -427,6 +428,7 @@
     quote: '<svg viewBox="0 0 24 24"><path d="M5.5 4.5h13A1.5 1.5 0 0 1 20 6v9a1.5 1.5 0 0 1-1.5 1.5H13l-4.5 3.5v-3.5h-3A1.5 1.5 0 0 1 4 15V6a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M8.5 9.5h7M8.5 12.5h4.5"/></svg>',
     disc: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="2.2"/><path d="M12 5.8a6.2 6.2 0 0 1 6.2 6.2"/></svg>',
     genre: '<svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
+    swap: '<svg viewBox="0 0 24 24"><path d="M4 8h15M15 4l4 4-4 4M20 16H5M9 12l-4 4 4 4"/></svg>',
     // the app's own Listened / Listen later glyphs (SD_LINE_ICONS ear / clock, screens.js)
     ear: '<svg viewBox="0 0 24 24"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3z"/><path d="M3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>',
     clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
@@ -450,7 +452,10 @@
           <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}<span>${esc(genreLabel())}</span></button>
         </div>
         <div class="ds-topr">
-          <button class="ds-modebtn" aria-label="Lyrics mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('qs')">${ICO.quote}<span>Lyrics</span></button>
+          <!-- csharpdeveloper (Eric 11-25): Lyrics went back into the Genres
+               sheet; this spot is the ONE-HAND switch, which moves the icon
+               column to the other wall (sdDoomSide, kept in sd-doom-side). -->
+          <button class="ds-modebtn ds-sidebtn" aria-label="Move the icons to the other side" onclick="event.stopPropagation(); sdDoomSide()">${ICO.swap}<span>${DS.side === 'left' ? 'Left' : 'Right'}</span></button>
         </div>
       </div>
       <div class="ds-scroll"></div>
@@ -477,6 +482,7 @@
         <div class="ds-gpanel" onclick="event.stopPropagation()">
           <div class="ds-gnub"></div>
           <div class="ds-ghd"><b>Genres</b><button class="ds-gclear" onclick="sdDoomGenreClear()">Show everything</button></div>
+          <button class="ds-glyr" onclick="sdDoomGenreClose(); sdDoomBeta('qs')">${ICO.quote}<span><b>Lyrics mode</b><small>Albums with their lyrics, line by line</small></span><i>›</i></button>
           <div class="ds-glist"></div>
           <button class="ds-ggo" onclick="sdDoomGenreCommit()" hidden>Pick genres</button>
         </div>
@@ -612,7 +618,7 @@
          the disc's top and each row follows at its natural pitch. The disc
          stays centred and only shrinks if it would reach the column. */
       const SPOTS = [['.ds-fav', 0], ['.ds-listened', 1], ['.ds-later', 2], ['.ds-share', 3], ['.ds-cmt', 4]];
-      const GAP = 14;                               // space between one icon and the next (no labels since 11-24)
+      const GAP = 18;                               // space between one icon and the next (14 → 18, Eric 11-25)
       const k = card.getBoundingClientRect();
       let c = cdEl.getBoundingClientRect();
       if (c.height) {
@@ -635,7 +641,8 @@
           const btn = btns[n], ico = btn && btn.querySelector('svg');
           if (!btn || !ico) return;
           const ib = ico.getBoundingClientRect(), bb = btn.getBoundingClientRect();   // an <svg> has no offsetTop
-          btn.style.left = (W - EDGE - railLeft - btn.offsetWidth / 2).toFixed(1) + 'px';
+          const colX = DS.side === 'left' ? EDGE : W - EDGE;   // the one-hand switch (11-25)
+          btn.style.left = (colX - railLeft - btn.offsetWidth / 2).toFixed(1) + 'px';
           btn.style.top = (top0 - (ib.top - bb.top) / scale0 + row * STEP).toFixed(1) + 'px';
         });
         /* CENTRED ON THE DISC (Eric 11-24: "center the icons with the verticality
@@ -663,12 +670,25 @@
     const cur = parseFloat(box.style.top) || parseFloat(getComputedStyle(box).top) || 0;
     box.style.top = (cur + (want - icon.getBoundingClientRect().top) / scale).toFixed(1) + 'px';
     const sh = card.querySelector('.ds-share');   // never under the one column (11-24): start 14px below Share
-    if (sh) { const gap = icon.getBoundingClientRect().top - sh.getBoundingClientRect().bottom - 14 * scale;
+    if (sh && DS.side !== 'left') { const gap = icon.getBoundingClientRect().top - sh.getBoundingClientRect().bottom - 14 * scale;
       if (gap < 0) box.style.top = (parseFloat(box.style.top) - gap / scale).toFixed(1) + 'px'; }
   }
   window.addEventListener('resize', () => {
     if (DS.scroller) DS.scroller.querySelectorAll('.ds-card').forEach(c => { if (c._prep) { fitTitle(c); alignRail(c); } });
   });
+  /* ONE-HAND SWITCH (csharpdeveloper, Eric 11-25: "a switch button … that lets
+     u move the icons to the other side so you can use it with one hand").
+     Moves Like · Listened · Later · Share · Reviews to the left wall and back;
+     the streaming icons stay by the songs. Remembered in sd-doom-side. */
+  window.sdDoomSide = function () {
+    DS.side = DS.side === 'left' ? 'right' : 'left';
+    try { localStorage.setItem('sd-doom-side', DS.side); } catch (e) {}
+    if (!DS.root) return;
+    DS.root.classList.toggle('ds-left', DS.side === 'left');
+    const lbl = DS.root.querySelector('.ds-sidebtn span'); if (lbl) lbl.textContent = DS.side === 'left' ? 'Left' : 'Right';
+    if (DS.scroller) DS.scroller.querySelectorAll('.ds-card').forEach(c => { if (c._prep) alignRail(c); });
+    haptic();
+  };
 
   function prep(card) {
     if (!card || card._prep) return;
@@ -1080,7 +1100,7 @@
     try { if (typeof silentClipUrl === 'function') { el.src = silentClipUrl(); el.play().catch(() => {}); } } catch (e) {}
 
     const root = document.createElement('div');
-    root.className = 'ds-root';
+    root.className = 'ds-root' + (DS.side === 'left' ? ' ds-left' : '');
     root.innerHTML = shellHtml();
     root.addEventListener('click', e => {
       e.stopPropagation();

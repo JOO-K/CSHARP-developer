@@ -546,3 +546,14 @@ html.sd-bigphone .ds-rbtn.ds-orbit { font-size: 8.5px; }
 .ds-rcount { margin-top: 3px; }
 .ds-cmt.mine svg { stroke: #a78bfa; }
 .ds-cmt.mine .ds-rcount { color: #a78bfa; }
+
+/* csharpdeveloper (Eric 11-25): the like and review counts ALWAYS show; the
+   icons are 2.5px larger (30 → 32.5, big phones 27 → 29.5) with 4px more
+   between them (GAP 18 in alignRail). Lyrics mode is back in the Genres sheet
+   (.ds-glyr), and the top right holds the one-hand switch (.ds-sidebtn). */
+.ds-likes, .ds-fav.on .ds-likes { opacity: 1; transform: translate(-50%, 0); }
+.ds-rcount { opacity: 1; }
+.ds-rbtn.ds-orbit svg { width: 32.5px; height: 32.5px; }
+html.sd-bigphone .ds-rbtn.ds-orbit svg { width: 29.5px; height: 29.5px; }
+@container (min-width: 420px) { .ds-rbtn.ds-orbit svg { width: 29.5px; height: 29.5px; } }
+.ds-sidebtn span { min-width: 3.2em; text-align: left; }
