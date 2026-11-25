@@ -398,5 +398,50 @@
   <!-- The PNG / 3x snap buttons, upper right (snap.js) — off 2026-10-02, back
        2026-10-20 for building flows in Figma. Local addresses only. -->
   <script src="snap.js?v=4"></script>
+  <!-- AUTO-UPDATE (Eric, 2026-11-25: "i dont like this add v2 at the end").
+       The home-screen app has no service worker, but iOS still keeps a saved
+       copy of this page, so a push didn't show up until the cache ran out.
+       When the app opens or comes back to the front, this fetches the page
+       fresh (cache:'reload' also refreshes the saved copy) and compares every
+       ?v=N in it with the ones this page loaded. If any differ, it reloads
+       once. The sessionStorage guard stops a reload loop if the server and
+       cache disagree. So: bump a ?v= on deploy and the phone picks it up. -->
+  <script>
+    (function () {
+      if (!/^https?:$/.test(location.protocol)) return;
+      // Every src/href="file?v=N" in the fresh page must already be loaded
+      // here; anything the app injects at runtime can't cause a false reload.
+      var have = {};
+      document.querySelectorAll('script[src],link[href]').forEach(function (el) {
+        have[el.getAttribute('src') || el.getAttribute('href')] = 1;
+      });
+      var busy = false;
+      function check() {
+        if (busy || document.visibilityState === 'hidden') return;
+        busy = true;
+        fetch(location.pathname, { cache: 'reload' })
+          .then(function (r) { return r.ok ? r.text() : null; })
+          .then(function (html) {
+            if (!html) return;
+            html = html.replace(/<!--[\s\S]*?-->/g, '');
+            var refs = [], m, re = /(?:src|href)="([^"]+\?v=\d+)"/g;
+            while ((m = re.exec(html))) refs.push(m[1]);
+            var stale = refs.filter(function (u) { return !have[u]; });
+            if (!stale.length) return;
+            var fresh = stale.join(',');
+            try {
+              if (sessionStorage.getItem('sd-autoupdate') === fresh) return;
+              sessionStorage.setItem('sd-autoupdate', fresh);
+            } catch (e) {}
+            location.reload();
+          })
+          .catch(function () {})
+          .then(function () { busy = false; });
+      }
+      window.addEventListener('load', check);
+      document.addEventListener('visibilitychange', check);
+      window.addEventListener('pageshow', function (e) { if (e.persisted) check(); });
+    })();
+  </script>
 </body>
 </html>
