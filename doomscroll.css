@@ -438,3 +438,76 @@ html.sd-reduce-motion .ds-disc, html.sd-reduce-motion .ds-fx { animation: none !
   padding: 0 12px 0 9px; font: 700 12px/1 var(--font-main);
 }
 .ds-credit { left: 50%; right: auto; transform: translateX(-50%); top: 23px; }
+
+/* ONE RAIL + CD LEFT (csharpdeveloper, Eric 11-23). Reviews · Share joined the
+   right rail under Later (railHtml); with the left rail gone the CD moves left
+   so it clears the taller rail. `left` (not a transform) so placeFixCd, which
+   reads the spacer's rect, puts the fixed disc there too. */
+.ds-cd { left: var(--ds-shift, -22px); }
+/* …and the score and the album / artist follow it (Eric 11-23: "move the rating
+   and titles and artist to match the center of the cd"), so all three share
+   one centre line. One value, --ds-shift. The title's box is 96px narrower than
+   the card, so shifted 22px it still clears the rail on the right. */
+.ds-score, .ds-title { position: relative; left: var(--ds-shift, -22px); }
+
+/* BIG PHONES, SMALLER RAIL (csharpdeveloper, Eric 11-23: "on larger phone sizes
+   the icons are way too large on the swipe mode"). A 420px+ phone already zooms
+   the whole app 1.12× (index.html), so the 36px icons / 20px gaps above stacked
+   on top of that — and the rail has five buttons now. Big phones get the
+   normal phone's rail, a touch tighter: 28px icons, 12px gaps, 9px labels. */
+@container (min-width: 420px) {
+  .ds-rbtn svg { width: 28px; height: 28px; }
+  .ds-rbtn { font-size: 9px; }
+  .ds-rail { gap: 12px; }
+}
+html.sd-bigphone .ds-rbtn svg { width: 28px; height: 28px; }
+html.sd-bigphone .ds-rbtn { font-size: 9px; }
+html.sd-bigphone .ds-rail { gap: 12px; }
+html.sd-bigphone .ds-svc-ico { width: 28px; height: 28px; border-radius: 7px; }
+html.sd-bigphone .ds-rail-svcs { gap: 7px; }
+
+/* SMALLER STREAMING ICONS (csharpversioncontrol, Eric 11-23: the lower-right
+   stack ran into the nav bar). 32 → 26px with 6px gaps on every phone; big
+   phones (already zoomed 1.12×) 24px. The stack still starts level with the
+   first song (alignRail), so it now ends well above the nav. */
+.ds-svc-ico { width: 26px; height: 26px; border-radius: 7px; }
+.ds-rail-svcs { gap: 6px; }
+html.sd-bigphone .ds-svc-ico { width: 24px; height: 24px; border-radius: 6px; }
+html.sd-bigphone .ds-rail-svcs { gap: 6px; }
+@container (min-width: 420px) { .ds-svc-ico { width: 24px; height: 24px; border-radius: 6px; } }
+
+/* TOP BAR, QUIETER (csharpversioncontrol, Eric 11-23): no "Previews by Deezer",
+   the genre pill alone at the top right, and Lyrics mode is a row at the top of
+   the Genres sheet (.ds-glyr) instead of its own pill. */
+.ds-top { justify-content: flex-end; }
+.ds-glyr {
+  display: flex; align-items: center; gap: 12px; width: 100%; flex: 0 0 auto;
+  margin: 0 0 14px; padding: 11px 14px; border: 0; border-radius: 14px; cursor: pointer;
+  background: rgba(255,255,255,.08); color: #fff; text-align: left; font-family: var(--font-main);
+}
+.ds-glyr:active { background: rgba(255,255,255,.14); }
+.ds-glyr svg { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.ds-glyr span { flex: 1 1 auto; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ds-glyr b { font-size: 14px; font-weight: 700; }
+.ds-glyr small { font-size: 12px; color: rgba(255,255,255,.6); }
+.ds-glyr i { font-style: normal; font-size: 20px; line-height: 1; color: rgba(255,255,255,.5); }
+
+/* RATING BACK IN THE MIDDLE (csharpversioncontrol, Eric 11-23): the score
+   centres on the card again; the CD (and the title under it) stay shifted. */
+.ds-score { left: 0; }
+
+/* CD CENTRED, ICONS IN TWO WALL-ALIGNED COLUMNS (csharpversioncontrol, Eric 11-23). The disc,
+   score and title are back on the card's centre line; alignRail places the
+   five rail buttons on a ring around the disc (.ds-orbit = absolute inside
+   .ds-rail, which keeps only the streaming icons in its flow). */
+.ds-card { --ds-shift: 0px; }
+.ds-rbtn.ds-orbit { position: absolute; margin: 0; }
+
+/* RAIL ICON SIZE (csharpversioncontrol, Eric 11-23): tried 36px, then
+   "make the icons smaller" - back to 30px with 9px labels; big phones
+   (zoomed 1.12x) 27px. */
+.ds-rbtn.ds-orbit svg { width: 30px; height: 30px; }
+.ds-rbtn.ds-orbit { font-size: 9px; }
+html.sd-bigphone .ds-rbtn.ds-orbit svg { width: 27px; height: 27px; }
+html.sd-bigphone .ds-rbtn.ds-orbit { font-size: 8.5px; }
+@container (min-width: 420px) { .ds-rbtn.ds-orbit svg { width: 27px; height: 27px; } .ds-rbtn.ds-orbit { font-size: 8.5px; } }

@@ -10,59 +10,127 @@
      phone previews index.html's big-phone scale: the app lays out at 440/s
      wide and is scaled ×s, exactly what the viewport meta does on the device.
      The fourth (11-20) keeps the real 440 layout and only grows the type
-     (fontbump.js: titles / 15px+ +3px, other text +2px). -->
+     (fontbump.js: titles / 15px+ +3px, other text +2px).
+     11-20 later, FOR USER TESTING SCREENSHOTS (Eric: "easily take a screenshot
+     of the different sizes and the iphone it matches to … without the iphone …
+     only 10px rounded corners"):
+     · Set: "Compare" (the four above) or "iPhone sizes" (every iPhone screen
+       size, chips to pick which; 420px+ ones get the big-phone zoom, as on the
+       device). Captions name the iPhones each size matches.
+     · Clean: no bezel, 10px corners, a hairline edge. Dark / Light backdrop.
+     · Save PNG: hides the bar, grabs this tab (Chrome asks once — pick "This
+       tab"), crops to the phones and downloads. Needs localhost / https.
+       Or press H to hide the bar and use Win+Shift+S. -->
 <style>
   :root { --bg: #0c0c0f; --ink: #e8e2d6; --dim: rgba(232,226,214,.55); --line: rgba(255,255,255,.12); --acc: #e8a83c; }
+  body.light { --bg: #f4f3f0; --ink: #1a1a1d; --dim: rgba(26,26,29,.55); --line: rgba(0,0,0,.14); --acc: #b87a12; }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 13px/1.4 system-ui, sans-serif; }
-  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
   .bar b { font-size: 14px; }
+  .bar .grp { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .bar button { border: 1px solid var(--line); background: none; color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; font: inherit; }
   .bar button.on { border-color: var(--acc); color: var(--acc); }
-  .bar label { display: inline-flex; align-items: center; gap: 8px; color: var(--dim); }
+  .bar button.go { background: var(--acc); border-color: var(--acc); color: #111; font-weight: 700; }
+  .bar label { display: inline-flex; align-items: center; gap: 6px; color: var(--dim); }
   .bar output { color: var(--acc); font-weight: 700; min-width: 3.5em; }
-  .stage { height: calc(100% - 58px); display: flex; justify-content: center; align-items: flex-start; padding-top: 14px; overflow: hidden; }
-  .row { display: flex; gap: 36px; align-items: flex-end; transform-origin: top center; }
-  .col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-  .cap { text-align: center; color: var(--dim); font-size: 14px; }
-  .cap b { display: block; color: var(--ink); font-size: 16px; }
+  .bar .sep { width: 1px; height: 20px; background: var(--line); }
+  #sizes:empty { display: none; }
+  #sizes button { padding: 3px 9px; font-size: 12px; }
+  body.hide-bar .bar { display: none; }
+  .stage { position: absolute; left: 0; right: 0; bottom: 0; top: var(--bar-h, 58px); display: flex; justify-content: center; align-items: flex-start; padding-top: 18px; overflow: hidden; }
+  body.hide-bar .stage { top: 0; }
+  .row { display: flex; gap: 36px; align-items: flex-end; transform-origin: top center; padding: 12px; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .cap { text-align: center; color: var(--dim); font-size: 14px; max-width: 100%; }
+  .cap b { display: block; color: var(--ink); font-size: 17px; }
+  .cap .dims { display: block; color: var(--acc); font-weight: 700; font-size: 14px; margin-top: 2px; }
   .phone { position: relative; overflow: hidden; border-radius: 48px; background: #000; box-shadow: 0 0 0 10px #1d1d21, 0 0 0 11px #3a3a40, 0 30px 80px rgba(0,0,0,.6); }
   .phone iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #111116; }
+  /* Clean: just the screen. */
+  body.clean .row { gap: 28px; }
+  body.clean .phone { border-radius: 10px; box-shadow: 0 0 0 1px var(--line), 0 10px 30px rgba(0,0,0,.25); }
+  .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #222; color: #eee; padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 9; }
+  .toast.show { opacity: 1; }
 </style>
 </head>
-<body>
-  <div class="bar">
-    <b>Phone size compare</b>
-    <span id="screens"></span>
-    <label><input id="kb" type="checkbox"> Keyboard (tap a comment or review box)</label>
-    <label>Big-phone scale <input id="s" type="range" min="1" max="1.15" step="0.01" value="1.12"> <output id="so">×1.12</output></label>
+<body class="clean">
+  <div class="bar" id="bar">
+    <b>Phone sizes</b>
+    <span class="grp" id="screens"></span>
+    <span class="sep"></span>
+    <span class="grp" id="sets"></span>
+    <span class="grp" id="sizes"></span>
+    <span class="sep"></span>
+    <span class="grp">
+      <button id="clean" class="on" title="No bezel, 10px corners">Clean</button>
+      <button id="light" title="Light backdrop">Light bg</button>
+      <button id="shot" class="go" title="Save the phones as a PNG (pick &quot;This tab&quot;)">Save PNG</button>
+      <button id="hide" title="Hide this bar (H brings it back)">Hide bar (H)</button>
+    </span>
+    <span class="sep"></span>
+    <label><input id="kb" type="checkbox"> Keyboard</label>
+    <label>Big-phone zoom <input id="s" type="range" min="1" max="1.15" step="0.01" value="1.12"> <output id="so">×1.12</output></label>
   </div>
   <div class="stage"><div class="row" id="row"></div></div>
+  <div class="toast" id="toast"></div>
 <script>
-  var PHONES = [
-    { name: 'Your iPhone', sub: '15 / 16 Pro · 393 × 852', w: 393, h: 852, scaled: false },
-    { name: 'Pro Max, today', sub: '16 Pro Max · 440 × 956', w: 440, h: 956, scaled: false },
-    { name: 'Pro Max, larger', sub: '440 × 956 · lays out at', w: 440, h: 956, scaled: true },
-    { name: 'Pro Max, bigger text', sub: '440 × 956 · titles +3px, other text +2px', w: 440, h: 956, scaled: false, bump: true },
+  // Every iPhone screen size (CSS px, portrait) and the models that have it.
+  var IPHONES = [
+    { w: 375, h: 667, models: 'iPhone SE (2nd & 3rd gen), 6s, 7, 8' },
+    { w: 375, h: 812, models: 'iPhone X, XS, 11 Pro, 12 mini, 13 mini' },
+    { w: 390, h: 844, models: 'iPhone 12, 12 Pro, 13, 13 Pro, 14, 16e' },
+    { w: 393, h: 852, models: 'iPhone 14 Pro, 15, 15 Pro, 16' },
+    { w: 402, h: 874, models: 'iPhone 16 Pro, 17, 17 Pro' },
+    { w: 414, h: 896, models: 'iPhone XR, XS Max, 11, 11 Pro Max' },
+    { w: 420, h: 912, models: 'iPhone Air' },
+    { w: 428, h: 926, models: 'iPhone 12 Pro Max, 13 Pro Max, 14 Plus' },
+    { w: 430, h: 932, models: 'iPhone 14 Pro Max, 15 Plus, 15 Pro Max, 16 Plus' },
+    { w: 440, h: 956, models: 'iPhone 16 Pro Max, 17 Pro Max' },
+  ];
+  function modelsOf(w, h) { var m = IPHONES.find(function (i) { return i.w === w && i.h === h; }); return m ? m.models : ''; }
+  var COMPARE = [
+    { name: 'Your iPhone', w: 393, h: 852, scaled: false },
+    { name: 'Pro Max, today', w: 440, h: 956, scaled: false },
+    { name: 'Pro Max, larger', w: 440, h: 956, scaled: true },
+    { name: 'Pro Max, bigger text', w: 440, h: 956, scaled: false, bump: true, note: 'titles +3px, other text +2px' },
   ];
   var SCREENS = [['home', 'Home'], ['swipe', 'Swipe'], ['wall', 'Trending'], ['profile', 'Profile'], ['notifications', 'Notifications']];
-  var cur = 'home', row = document.getElementById('row'), sIn = document.getElementById('s');
+  var store = function (k, v) { try { if (v === undefined) return JSON.parse(localStorage.getItem('sd-sizes-' + k)); localStorage.setItem('sd-sizes-' + k, JSON.stringify(v)); } catch (e) {} };
+  var cur = 'home', set = store('set') || 'iphones';
+  var picked = store('picked') || [375 + 'x' + 667, 393 + 'x' + 852, 402 + 'x' + 874, 430 + 'x' + 932, 440 + 'x' + 956];
+  var row = document.getElementById('row'), sIn = document.getElementById('s');
   var frames = [];
-  PHONES.forEach(function (p) {
-    var col = document.createElement('div'); col.className = 'col';
-    col.innerHTML = '<div class="phone" style="width:' + p.w + 'px;height:' + p.h + 'px"><iframe></iframe></div><div class="cap"><b>' + p.name + '</b><span></span></div>';
-    row.appendChild(col);
-    frames.push({ p: p, f: col.querySelector('iframe'), cap: col.querySelector('.cap span') });
-  });
+
+  function phones() {
+    if (set === 'compare') return COMPARE;
+    // iPhone sizes: as each really renders — 420px+ phones get index.html's zoom.
+    return IPHONES.filter(function (i) { return picked.indexOf(i.w + 'x' + i.h) >= 0; })
+      .map(function (i) { return { name: i.models, w: i.w, h: i.h, scaled: i.w >= 420, plain: true }; });
+  }
+  function build() {
+    row.innerHTML = ''; frames = [];
+    phones().forEach(function (p) {
+      var col = document.createElement('div'); col.className = 'col';
+      col.style.width = p.w + 'px';
+      col.innerHTML = '<div class="phone" style="width:' + p.w + 'px;height:' + p.h + 'px"><iframe></iframe></div><div class="cap"></div>';
+      row.appendChild(col);
+      frames.push({ p: p, f: col.querySelector('iframe'), cap: col.querySelector('.cap') });
+    });
+    size(); load(); fit();
+  }
   function size() {
     var s = +sIn.value;
     document.getElementById('so').textContent = '×' + s.toFixed(2);
     frames.forEach(function (x) {
-      var k = x.p.scaled ? s : 1;
-      x.f.style.width = Math.round(x.p.w / k) + 'px';
-      x.f.style.height = Math.round(x.p.h / k) + 'px';
-      x.f.style.transform = 'scale(' + (x.p.w / Math.round(x.p.w / k)) + ')';
-      x.cap.textContent = x.p.scaled ? x.p.sub + ' ' + Math.round(x.p.w / k) : x.p.sub;
+      var p = x.p, k = p.scaled ? s : 1, lw = Math.round(p.w / k);
+      x.f.style.width = lw + 'px';
+      x.f.style.height = Math.round(p.h / k) + 'px';
+      x.f.style.transform = 'scale(' + (p.w / lw) + ')';
+      var dims = p.w + ' × ' + p.h + (p.scaled && k > 1 ? ' · zoomed, lays out at ' + lw : '') + (p.note ? ' · ' + p.note : '');
+      x.cap.innerHTML = p.plain
+        ? '<b>' + p.name + '</b><span class="dims">' + dims + '</span>'
+        : '<b>' + p.name + '</b><span class="dims">' + dims + '</span>' + modelsOf(p.w, p.h);
     });
   }
   function load() {
@@ -82,16 +150,75 @@
   }
   function fit() {
     var st = document.querySelector('.stage');
+    document.documentElement.style.setProperty('--bar-h', document.body.classList.contains('hide-bar') ? '0px' : document.getElementById('bar').offsetHeight + 'px');
     row.style.transform = 'none';
-    var k = Math.min(1, (st.clientHeight - 20) / row.offsetHeight, (st.clientWidth - 40) / row.offsetWidth);
+    var k = Math.min(1, (st.clientHeight - 24) / row.offsetHeight, (st.clientWidth - 24) / row.offsetWidth);
     row.style.transform = 'scale(' + k + ')';
   }
+  function paintBar() {
+    document.getElementById('sets').innerHTML =
+      '<button data-set="iphones"' + (set === 'iphones' ? ' class="on"' : '') + '>iPhone sizes</button>' +
+      '<button data-set="compare"' + (set === 'compare' ? ' class="on"' : '') + '>Compare</button>';
+    document.getElementById('sizes').innerHTML = set !== 'iphones' ? '' : IPHONES.map(function (i) {
+      var id = i.w + 'x' + i.h;
+      return '<button data-size="' + id + '" title="' + i.models + '"' + (picked.indexOf(id) >= 0 ? ' class="on"' : '') + '>' + i.w + '×' + i.h + '</button>';
+    }).join('');
+    fit();
+  }
+  function toast(t) { var e = document.getElementById('toast'); e.textContent = t; e.classList.add('show'); clearTimeout(e._t); e._t = setTimeout(function () { e.classList.remove('show'); }, 3500); }
+
+  /* SAVE PNG — the iframes can't be drawn by an html-to-canvas library, so this
+     captures the real tab (getDisplayMedia, Chrome asks: pick "This tab"),
+     takes one frame with the bar hidden, crops to the phones + captions. */
+  async function shot() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { toast('Screen capture needs localhost or https — press H and use Win+Shift+S'); return; }
+    var stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { displaySurface: 'browser' }, audio: false, preferCurrentTab: true, selfBrowserSurface: 'include' });
+    } catch (e) { toast('Capture cancelled'); return; }
+    var hadHide = document.body.classList.contains('hide-bar');
+    document.body.classList.add('hide-bar'); fit();
+    var v = document.createElement('video'); v.srcObject = stream; v.muted = true;
+    await v.play();
+    await new Promise(function (r) { setTimeout(r, 600); });   // the bar's gone and the frame has caught up
+    var r = row.getBoundingClientRect();
+    var kx = v.videoWidth / window.innerWidth, ky = v.videoHeight / window.innerHeight;
+    var c = document.createElement('canvas');
+    c.width = Math.round(r.width * kx); c.height = Math.round(r.height * ky);
+    c.getContext('2d').drawImage(v, r.left * kx, r.top * ky, r.width * kx, r.height * ky, 0, 0, c.width, c.height);
+    stream.getTracks().forEach(function (t) { t.stop(); });
+    if (!hadHide) document.body.classList.remove('hide-bar');
+    fit();
+    c.toBlob(function (b) {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'spindeck-sizes-' + cur + '-' + (set === 'compare' ? 'compare' : picked.length + 'iphones') + '.png';
+      a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); }, 4000);
+      toast('Saved ' + a.download);
+    }, 'image/png');
+  }
+
   document.getElementById('screens').innerHTML = SCREENS.map(function (s) { return '<button data-s="' + s[0] + '">' + s[1] + '</button>'; }).join(' ');
   document.getElementById('screens').addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) { cur = b.dataset.s; load(); } });
+  document.getElementById('sets').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; set = b.dataset.set; store('set', set); paintBar(); build(); });
+  document.getElementById('sizes').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var id = b.dataset.size, i = picked.indexOf(id);
+    if (i >= 0) { if (picked.length > 1) picked.splice(i, 1); } else picked.push(id);
+    picked.sort(function (a, b) { return parseInt(a) - parseInt(b) || parseInt(a.split('x')[1]) - parseInt(b.split('x')[1]); });
+    store('picked', picked); paintBar(); build();
+  });
+  document.getElementById('clean').addEventListener('click', function () { this.classList.toggle('on', document.body.classList.toggle('clean')); });
+  document.getElementById('light').addEventListener('click', function () { this.classList.toggle('on', document.body.classList.toggle('light')); });
+  document.getElementById('hide').addEventListener('click', function () { document.body.classList.add('hide-bar'); fit(); toast('Press H to bring the bar back'); });
+  document.getElementById('shot').addEventListener('click', shot);
+  document.addEventListener('keydown', function (e) {
+    if ((e.key === 'h' || e.key === 'H') && !e.metaKey && !e.ctrlKey && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) { document.body.classList.toggle('hide-bar'); fit(); }
+  });
   sIn.addEventListener('input', size);
   document.getElementById('kb').addEventListener('change', load);
   window.addEventListener('resize', fit);
-  size(); load(); fit();
+  paintBar(); build();
 </script>
 </body>
 </html>

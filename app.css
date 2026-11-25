@@ -14282,11 +14282,16 @@ html.sd-reduce-motion .v3-nav-item.sd-post-pop::after { animation: none; }
    the cover twice the size (40 -> 80), and on the right Like / Listened /
    Listen later / + over the streaming services (rvpRecSideHtml). The sheet's
    record line is unchanged. */
-.v3-rsh-record--page { background: none !important; padding: 0; gap: 12px; align-items: center; }
-.v3-rsh-record--page .v3-rsh-art { width: 80px; height: 80px; border-radius: 8px; }
-.v3-rsh-record--page .v3-rsh-rec-album { font-size: 17px; font-weight: 600; white-space: normal;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.v3-rsh-record--page .v3-rsh-rec-artist { font-size: 13px; white-space: normal; }
+/* 11-21 (Eric): "i dont want the album images and the icons i just want the
+   album name and artist name centered … more space for the album name". The
+   cover and the Like/Listened/Later/+ grid are gone from the page (the sheet
+   keeps its own); the two lines sit centred, the album name bigger and
+   allowed three lines across the full width. Still taps through to the album. */
+.v3-rsh-record--page { background: none !important; padding: 0 8px; justify-content: center; text-align: center; }
+.v3-rsh-record--page .v3-rsh-rec-who { align-items: center; gap: 4px; }
+.v3-rsh-record--page .v3-rsh-rec-album { font-size: 22px; font-weight: 600; line-height: 1.2; white-space: normal;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; text-wrap: balance; }
+.v3-rsh-record--page .v3-rsh-rec-artist { font-size: 14px; white-space: normal; }
 .rvp-rec-side { margin-left: auto; flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 /* Like / Listened / Later / + as a 2×2 of big tap targets (Eric 11-16: the
    streaming row is gone, "make those 4 larger and easy to press"). */
@@ -14595,6 +14600,56 @@ html.sd-reduce-motion .v3-bottom-nav.is-quick .v3-nav-dots i { animation: none; 
 .v3-ap-head .v3-song-title { padding-left: 0; }
 .v3-ap-fav { display: inline-flex; vertical-align: -1px; margin-left: 6px; color: #ff5c8a; }
 .v3-ap-fav svg { width: 11px; height: 11px; fill: currentColor; stroke: currentColor; }
+
+/* Popular songs round 4 (csharpdeveloper, Eric 11-23: "same margins as the other
+   elements its squished inwards … doesnt have the like icon … the icons are too
+   small … view more to take you to another page").
+   MARGINS: the rows sat in .v3-artist-albums' 12px AND padded 12px of their own,
+   so covers started 24px in while the album grid starts at 12 and the review
+   cards' contents at 16. Rows now pad 4px → contents 16px from the screen edge,
+   the review cards' line. ICONS: cover 34 → 44, comment bubble 11 → 16, a 18px
+   like heart (the review sheet's, apSongLike), bigger type to match. */
+.v3-ap-songs .v3-ap-row, .v3-ap-songs .v3-ap-head { padding-left: 4px; padding-right: 4px; gap: 12px; }
+.v3-ap-songs { --song-dur-w: 50px; --song-rate-w: 38px; }
+.v3-ap-row { padding-top: 10px; padding-bottom: 10px; }
+.v3-ap-row .v3-ap-art { width: 44px; height: 44px; border-radius: 5px; }
+.v3-ap-row .v3-ap-main { gap: 2px; }
+.v3-ap-row .v3-ap-t { font-size: 14px; }
+.v3-ap-row .v3-ap-s { font-size: 11.5px; }
+.v3-ap-row .v3-song-cmt { gap: 5px; }
+.v3-ap-row .v3-song-cmt svg { width: 16px; height: 16px; }
+.v3-ap-row .v3-song-cmt-n { font-size: 11.5px; }
+.v3-ap-row .v3-song-rate { font-size: 14px; }
+.v3-ap-like, .v3-ap-like-h { width: 26px; flex-shrink: 0; }
+.v3-ap-like {
+  display: inline-flex; align-items: center; justify-content: center; height: 30px;
+  color: rgba(232,226,214,0.45); cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.v3-ap-like svg { width: 18px; height: 18px; }
+.v3-ap-like.on { color: #ff5c8a; }
+.v3-ap-like.on svg { fill: currentColor; }
+.v3-ap-like:active { transform: scale(.88); }
+.s-home-v3--light.s-home-v3--album .v3-ap-like:not(.on) { color: rgba(26,18,8,0.4); }
+.v3-ap-more { margin-top: 12px; }
+
+/* THE POPULAR SONGS PAGE (apMoreSongs): over the artist page, under the app
+   header (its back caret closes it; `top` is set from the header's bottom), the
+   shell's own background, sliding in from the right. Padded at the bottom so the
+   last rows clear the floating nav. */
+.v3-ap-page {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 4px 12px 130px; box-sizing: border-box; text-align: left;
+  background: #111116; color: #e8e2d6;
+  transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.7,.2,1);
+}
+.v3-ap-page.open { transform: none; }
+.s-home-v3--light .v3-ap-page { background: var(--bg, #f3ede2); color: #1a1208; }
+.v3-ap-page-hd { padding: 6px 4px 14px; }
+.v3-ap-page-title { font-family: var(--font-main); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.v3-ap-page-sub { margin-top: 3px; font-size: 12.5px; color: rgba(232,226,214,0.5); }
+.s-home-v3--light .v3-ap-page-sub { color: rgba(26,18,8,0.5); }
+.sd-reduce-motion .v3-ap-page { transition: none; }
 /* EDGE SWIPE BACK, THE PAGE FOLLOWS THE FINGER (csharpdeveloper, 2026-11-18;
    sdEdgeBack in app.js). The dragged page casts a shadow on its left edge over
    a dim backdrop (its container, while the drag lasts). */
@@ -14610,3 +14665,108 @@ html.sd-reduce-motion .v3-bottom-nav.is-quick .v3-nav-dots i { animation: none; 
 .sd-prev-page {
   position: absolute; z-index: 1; pointer-events: none; overflow: hidden; will-change: transform;
 }
+
+/* The artist page's "back 2 top" belongs to the page underneath — hidden while
+   the Popular songs page (apMoreSongs) is over it. */
+.s-home-v3:has(.v3-ap-page.open) .v3-nav-top { display: none; }
+
+/* PROFILE PICKS = HOME'S TABS (csharpdeveloper, Eric 11-23: "change the fav
+   songs fav albums listened listen later part in the profile to look like our
+   other four tab options … like the homepage"). The bar now carries home's
+   classes (`wall2-bar v3-feed-tabs`, chips `wall2-cat`), so it gets the same
+   bare words, 13.5px, spread on space-between, gold + hairline when active.
+   This block only takes off the old pill (.prof-picks-seg / -tab rules above)
+   and sets the sides: the profile's section already sits 12px in, so 4px puts
+   the words on home's 16px line. profPicksTab still flips `.active`. */
+.s-home-v3 .wall2-bar.v3-feed-tabs.prof-picks-seg {
+  background: none; box-shadow: none; border-radius: 0;
+  gap: 0; padding: 2px 4px 10px; margin: 0 0 4px;
+}
+.s-home-v3 .prof-picks-seg .wall2-cat.prof-picks-tab {
+  flex: 0 0 auto; text-transform: none; font-family: var(--font-main);
+  letter-spacing: 0; border-radius: 0; padding: 6px 2px 5px; overflow: visible;
+}
+.s-home-v3 .prof-picks-seg .wall2-cat.prof-picks-tab.active { background: none; box-shadow: none; }
+
+/* PROFILE ON HOME'S MARGINS (csharpdeveloper, Eric 11-23: "same margins as the
+   homepage for the profile … the songs are a bit close together inside and the
+   pinned reviews dont have the same margins either"). Home's card rule runs
+   10px from the screen's edges with its contents at 16; the profile's sections
+   sit 12px in, so the review cards (pins + history) reach 2px out, the song
+   rows pad 4px (contents at 16 → 374) with a little more air between them,
+   and the section headings move to the 16px line. */
+.prof-pins .v3-rev-card--feed, .prof-feed .v3-rev-card--feed { margin-left: -2px; margin-right: -2px; }
+.prof-sec-hd, .prof-feed-hd { margin-left: 4px; margin-right: 4px; }
+.prof-songs { gap: 4px; }
+.prof-song { padding: 9px 4px; gap: 14px; }
+.prof-song-art { width: 44px; height: 44px; }
+.prof-song-meta { gap: 3px; }
+.prof-song-title { font-size: 13.5px; }
+.prof-song-sub { font-size: 11.5px; }
+
+/* THE THREE LIST BOXES (profListsHtml), a 3×1 row under the pins. */
+.prof-lists { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 22px -2px 0; }
+.prof-list-box {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0;
+  padding: 16px 6px 13px; border-radius: 14px; cursor: pointer; font-family: var(--font-main);
+  background: var(--pf-well, rgba(128,128,128,0.10));
+  border: 1px solid var(--pf-line, rgba(128,128,128,0.18));
+  color: var(--pf-fg); text-align: center; -webkit-tap-highlight-color: transparent;
+  transition: transform .12s, background .14s;
+}
+.prof-list-box:hover { background: color-mix(in srgb, var(--pf-fg) 7%, transparent); }
+.prof-list-box:active { transform: scale(.97); }
+.prof-list-ico { display: inline-flex; color: var(--star, #e8a83c); margin-bottom: 4px; }
+.prof-list-ico svg { width: 26px; height: 26px; }
+.prof-list-lbl { font-size: 13.5px; font-weight: 700; white-space: nowrap; }
+.prof-list-n { font-family: var(--font-mono); font-size: 10px; color: var(--pf-fg2); }
+.prof-list-go { margin-top: 6px; font-size: 10.5px; font-weight: 600; color: var(--pf-fg2); white-space: nowrap; }
+
+/* A box's page (profListOpen): over the profile, under the header, before the nav. */
+.prof-list-page {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+  overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+  padding: 2px 12px 130px; box-sizing: border-box; text-align: left;
+  transform: translateX(100%); transition: transform .26s cubic-bezier(.2,.7,.2,1);
+}
+.prof-list-page.open { transform: none; }
+.sd-reduce-motion .prof-list-page { transition: none; }
+.prof-list-page-hd { display: flex; align-items: center; gap: 6px; padding: 4px 0 6px; color: var(--pf-fg); }
+.prof-list-page-back {
+  width: 34px; height: 34px; margin-left: -6px; border: none; background: none; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; color: inherit;
+}
+.prof-list-page-back svg { width: 22px; height: 22px; }
+.prof-list-page-title { font-family: var(--font-main); font-size: 24px; font-weight: 700; letter-spacing: -0.01em; }
+.prof-list-page .prof-sec { margin-top: 10px; }
+.s-home-v3:has(.prof-list-page.open) .v3-nav-top { display: none; }
+/* Two tabs (Favorites' page) don't fill a row — sit them left instead of spread. */
+.s-home-v3 .prof-list-page .wall2-bar.v3-feed-tabs.prof-picks-seg { justify-content: flex-start; gap: 26px; }
+
+/* The album page's quick-like heart (songLikeHtml): the artist page's heart,
+   sized to the tracklist's 12px rows so they don't grow. */
+.v3-rev-songs .v3-ap-like, .v3-rev-songs .v3-ap-like-h { width: 24px; }
+.v3-rev-songs .v3-ap-like { height: 22px; }
+.v3-rev-songs .v3-ap-like svg { width: 15px; height: 15px; }
+
+/* CHANGES MADE (paintLogSave, 11-23): a posted review being edited says so at
+   the top of the sheet, with a Post changes shortcut. */
+.sd-log-changed {
+  position: sticky; top: 0; z-index: 4;
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 8px; padding: 8px 10px 8px 12px; border-radius: 10px;
+  background: rgba(232,168,60,0.12); border: 1px solid rgba(232,168,60,0.35);
+  font-family: var(--font-main); font-size: 12.5px; font-weight: 600; color: #e8a83c;
+}
+.sd-log-changed[hidden] { display: none; }
+.sd-log-changed-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.sd-log-changed-t { flex: 1; }
+.sd-log-changed-save {
+  border: none; border-radius: 999px; padding: 6px 12px; cursor: pointer;
+  background: #e8a83c; color: #16130d; font-family: var(--font-main); font-size: 12px; font-weight: 700;
+}
+/* The artist name in a card's / the review sheet's record line is its own tap (sdArtistTap). */
+.v3-rev-record-artist[data-artist], .v3-rsh-rec-artist-n { cursor: pointer; }
+.v3-rev-record-artist[data-artist]:active, .v3-rsh-rec-artist-n:active { opacity: .6; }
+.sd-log-artist.is-link { cursor: pointer; }
+.sd-log-artist.is-link:active { opacity: .6; }

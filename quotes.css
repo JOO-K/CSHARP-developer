@@ -278,3 +278,35 @@ html.sd-reduce-motion .qs-ln { transition: opacity .2s; transform: none; }
 /* Genres where the mute button was (11-06); the pill is the Player's .cp-genre */
 .qs-genre { z-index: 1; }
 .qs-gsheet { z-index: 6; }
+
+/* ── csharpdeveloper (Eric 11-23): CLEAR OF THE NAV, SMALLER, THREE LINES ──
+   The song block and the CD dock sat under the floating nav (it covers the
+   bottom ~74px): both rise to 96px and get smaller (score 46 → 34, title
+   18 → 16, CD 88 → 72), and the comment + lyrics body ends above them.
+   Lyrics: the line sung before, the line being sung (karaoke + ball) and the
+   next line, in three slots (lyrSlots / setCtx, quotes.js). The middle slot is
+   in flow so a long line can wrap; the outgoing line is lifted out of flow to
+   crossfade over it. */
+.qs-song { bottom: 96px; right: 112px; }
+.qs-dock { bottom: 96px; }
+.qs-big { font-size: 34px; }
+.qs-score { margin-bottom: 6px; gap: 8px; }
+.qs-st { font-size: 16px; }
+.qs-sa { font-size: 12px; }
+.qs-go { margin-top: 8px; padding: 6px 11px; font-size: 11.5px; }
+.qs-cd { width: 72px; }
+.qs-body { bottom: 250px; padding-bottom: 40px; }
+.qs-lyr { margin-top: 34px; min-height: 0; font-size: 16px; }
+.qs-lprev, .qs-lnext {
+  min-height: 1.3em; opacity: 0; transition: opacity .3s ease;
+  font-size: .86em; line-height: 1.3; color: rgba(255,255,255,.38);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.qs-lprev { color: rgba(255,255,255,.55); margin-bottom: 8px; }
+.qs-lnext { margin-top: 8px; }
+.qs-lprev.in, .qs-lnext.in { opacity: 1; }
+.qs-lcur { position: relative; min-height: 1.3em; }
+.qs-lcur .qs-ln { position: relative; }
+.qs-lcur .qs-ln.out { position: absolute; left: 0; right: 0; top: 0; }
+/* the ball hops ~24px over the line being sung — room for it under the line before */
+.qs-lprev { margin-bottom: 20px; }

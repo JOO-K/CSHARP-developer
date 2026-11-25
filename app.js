@@ -1030,12 +1030,64 @@ window.onArtistName = function (el) {
     const body = s.querySelector('.v3-body'); if (body) body.scrollTop = 0;
   });
 };
+/* REAL ARTIST PHOTOS (csharpdeveloper, Eric 11-20: "can we have real artist
+   images now for the artist pages does deezer have that"). The shelf's own
+   artists already carry photos (data.js's local files + each persona's Deezer
+   `artistImg`); anyone else — Deezer recs, genre fills, "More by" — fell back
+   to the album cover. `sdArtistPic` asks Deezer (artist/<id> when the record
+   knows it, else an exact-name search) for `picture_xl`, keeps it in
+   ARTIST_IMG so every surface that reads that map gets it, and caches it in
+   localStorage (`sd-artist-pics-v1`; a miss is cached as '' so we don't ask
+   twice). Deezer's no-photo placeholder (`/images/artist//`) counts as a miss.
+   Wireframe mode still paints these as "Artist Image", same as before. */
+const SD_ARTIST_PICS_KEY = 'sd-artist-pics-v1';
+let SD_ARTIST_PICS = null;
+const SD_ARTIST_PIC_P = new Map();
+function sdArtistPicsLoad() {
+  if (!SD_ARTIST_PICS) { try { SD_ARTIST_PICS = JSON.parse(localStorage.getItem(SD_ARTIST_PICS_KEY) || '{}') || {}; } catch (e) { SD_ARTIST_PICS = {}; } }
+  return SD_ARTIST_PICS;
+}
+function sdArtistPicsAdopt() {   // cached photos into the current ARTIST_IMG (persona switches rebuild it)
+  const c = sdArtistPicsLoad();
+  Object.keys(c).forEach(n => { if (c[n] && window.ARTIST_IMG && !ARTIST_IMG[n]) ARTIST_IMG[n] = c[n]; });
+}
+function sdArtistPic(a) {
+  const name = a && a.artist;
+  if (!name) return Promise.resolve('');
+  if (window.ARTIST_IMG && ARTIST_IMG[name]) return Promise.resolve(ARTIST_IMG[name]);
+  const c = sdArtistPicsLoad();
+  if (name in c) { if (c[name]) ARTIST_IMG[name] = c[name]; return Promise.resolve(c[name]); }
+  if (SD_ARTIST_PIC_P.has(name)) return SD_ARTIST_PIC_P.get(name);
+  const key = name.toLowerCase();
+  const pic = x => { const u = x && (x.picture_xl || x.picture_big || ''); return u && u.indexOf('/artist//') < 0 ? u : ''; };
+  const p = (a.artistId ? dz('artist/' + a.artistId).then(pic) : Promise.resolve(''))
+    .then(u => u || dz('search/artist?q=' + encodeURIComponent(name) + '&limit=5').then(r => {
+      const hits = ((r && r.data) || []).filter(x => String(x.name).toLowerCase() === key);
+      hits.sort((x, y) => (y.nb_fan || 0) - (x.nb_fan || 0));   // short names collide: the most-followed exact match
+      return pic(hits[0]);
+    }))
+    .catch(() => '')
+    .then(u => {
+      c[name] = u || '';
+      try { localStorage.setItem(SD_ARTIST_PICS_KEY, JSON.stringify(c)); } catch (e) {}
+      if (u && window.ARTIST_IMG) ARTIST_IMG[name] = u;
+      return u;
+    });
+  SD_ARTIST_PIC_P.set(name, p);
+  return p;
+}
+window.sdArtistPic = sdArtistPic;
 function populateArtistPage(scr) {
   const a = scr._album || window.activeAlbum || window.featuredAlbum;
   if (!a) return;
   const banner = ARTIST_IMG[a.artist] || a.image;
   const albumEl = scr.querySelector('.v3-album');
   if (albumEl) { if (albumEl._pixStop) albumEl._pixStop(); albumEl.style.backgroundImage = `url('${banner}')`; }   // a pending album-cover load must not paint over the photo
+  // No photo of our own: Deezer's, then swap it in if this artist's page is still up.
+  if (!ARTIST_IMG[a.artist]) sdArtistPic(a).then(u => {
+    if (!u || !albumEl || scr._album !== a || !scr.classList.contains('s-home-v3--artist')) return;
+    albumEl.style.backgroundImage = `url('${u}')`;
+  });
   const nameEl = scr.querySelector('.v3-blue-album');     // now the artist name
   if (nameEl) nameEl.textContent = a.artist;
   const genreEl = scr.querySelector('.v3-blue-artist');   // now the genre
@@ -1208,36 +1260,100 @@ function apPaintSongs(scr, a) {
        comment here is the same one on the album page. The row opens the song
        sheet (apSongLog), where the like and the thread are. Each row also
        carries its cover small, since the songs come from different records. */
-    sec2.querySelector('.v3-ap-songs').innerHTML = `
+    sec2.querySelector('.v3-ap-songs').innerHTML = apSongsHtml(list.slice(0, n), a);
+    sec2.querySelector('.v3-ap-more').hidden = n >= list.length;
+    sec2.hidden = !list.length;
+    // A Popular songs page left open from another artist goes (the page is per artist).
+    scr.querySelectorAll('.v3-ap-page').forEach(pg => { if (pg.dataset.artist !== a.artist) pg.remove(); });
+  });
+}
+/* One builder for the artist page's 5 rows and the Popular songs page's full
+   list. Like heart (csharpdeveloper, Eric 11-23: "doesnt have the like icon
+   similar to the review page"): the review sheet's per-song heart, the SAME
+   `song::<title>::<album>` fav flag (apSongLike), so the album page's
+   heart-for-a-number, the review sheet and these rows all agree. It is a span,
+   not a button — the row is already a <button>. */
+function apSongsHtml(rows, a) {
+  const heart = typeof RVP_HEART !== 'undefined' ? RVP_HEART : '♥';
+  return `
       <div class="v3-song-head v3-ap-head">
         <span class="v3-song-title">Song</span>
+        <span class="v3-ap-like-h"></span>
         <span class="v3-song-dur">Comments</span>
         <span class="v3-song-rate">Rating</span>
-      </div>` + list.slice(0, n).map((t, i) => {
-      const albName = t.album.title || '';
-      const alb = { album: albName, artist: (t.artist && t.artist.name) || a.artist };
-      const ck = songCmtKey(t.title, albName), ct = songCmtTotal(t.title, albName);
-      const art = String(t.album.cover_small || t.album.cover_medium || '').replace(/'/g, '%27');
-      return `
-      <button class="v3-song-row v3-ap-row" type="button" data-i="${i}" data-title="${_revAttr(t.title)}" onclick="event.stopPropagation(); apSongLog(this)">
+      </div>` + rows.map((t, i) => {
+    const albName = t.album.title || '';
+    const alb = { album: albName, artist: (t.artist && t.artist.name) || a.artist };
+    const ck = songCmtKey(t.title, albName), ct = songCmtTotal(t.title, albName);
+    const art = String(t.album.cover_small || t.album.cover_medium || '').replace(/'/g, '%27');
+    const fav = songIsFav(alb, t.title);
+    return `
+      <button class="v3-song-row v3-ap-row" type="button" data-i="${i}" data-title="${_revAttr(t.title)}" data-album="${_revAttr(albName)}" onclick="event.stopPropagation(); apSongLog(this)">
         <span class="v3-ap-art" style="background-image:url('${art}')"></span>
-        <span class="v3-song-title v3-ap-main"><span class="v3-ap-t">${_sdsEsc(t.title)}${songIsFav(alb, t.title) ? `<span class="v3-ap-fav">${typeof RVP_HEART !== 'undefined' ? RVP_HEART : '♥'}</span>` : ''}</span><span class="v3-ap-s">${_sdsEsc(albName)}</span></span>
+        <span class="v3-song-title v3-ap-main"><span class="v3-ap-t">${_sdsEsc(t.title)}</span><span class="v3-ap-s">${_sdsEsc(albName)}</span></span>
+        <span class="v3-ap-like${fav ? ' on' : ''}" role="button" aria-label="Like ${_revAttr(t.title)}" aria-pressed="${fav}" onclick="event.stopPropagation(); apSongLike(this)">${heart}</span>
         <span class="v3-song-dur v3-song-cmt">${CMT_SVG}<span class="v3-song-cmt-n" data-k="${_revAttr(ck)}" data-n="${ct}">${cmtCount(ck, ct) || ''}</span></span>
         ${songRateHtml(alb, { title: t.title, rating: apSongRating(t.title, albName) })}
       </button>`;
-    }).join('');
-    sec2.querySelector('.v3-ap-more').hidden = n >= list.length;
-    sec2.hidden = !list.length;
-  });
+  }).join('');
 }
+window.apSongLike = function (el) {
+  const row = el && el.closest('.v3-ap-row, .v3-song-row');
+  if (!row) return;
+  const scr = row.closest('.app-screen');
+  const title = row.dataset.title, albName = row.dataset.album || (scr && scr._album && scr._album.album) || '';
+  const key = `song::${title}::${albName}`;
+  const d = logDrafts()[key] || {};
+  d.fav = !d.fav;
+  putDraft(key, d);
+  sdHaptic(6);
+  // Every copy of this song on screen (both shells, the row and the page).
+  document.querySelectorAll('.v3-ap-row, .v3-song-row').forEach(r => {
+    if (r.dataset.title !== title || (r.dataset.album || '') !== albName) return;
+    const l = r.querySelector('.v3-ap-like');
+    if (l) { l.classList.toggle('on', !!d.fav); l.setAttribute('aria-pressed', String(!!d.fav)); }
+  });
+  homeShells().forEach(sc => refreshSongFavs(sc));
+};
+/* VIEW MORE → ITS OWN PAGE (csharpdeveloper, Eric 11-23: "can we get the view
+   more to take you to another page for popular songs instead of it loading more
+   below it"). A page laid over the artist page inside the same shell (under the
+   app header, so the header's back caret closes it — sdHeaderBack checks it
+   first), holding all of Deezer's top tracks (up to 50) in the same rows. The
+   artist page underneath keeps its scroll. apRowsPage is the row list's owner
+   for apSongLog, which looks rows up by data-i. */
 window.apMoreSongs = function (btn) {
   const scr = btn && btn.closest('.s-home-v3');
   const a = scr && scr._album;
-  if (!a) return;
+  if (!a || !scr._apList) return;
   sdHaptic(6);
-  const k = String(a.artist || '').toLowerCase();
-  AP_SHOWN.set(k, (AP_SHOWN.get(k) || AP_STEP) + AP_STEP);
-  homeShells().forEach(s => { if (s.classList.contains('s-home-v3--artist') && s._album && s._album.artist === a.artist) apPaintSongs(s, s._album); });
+  scr.querySelectorAll('.v3-ap-page').forEach(pg => pg.remove());
+  const hdr = scr.querySelector('.v3-header');
+  const k = scr.getBoundingClientRect().height / (scr.offsetHeight || 1) || 1;   // the viewer scales the phone
+  const top = hdr ? Math.max(0, (hdr.getBoundingClientRect().bottom - scr.getBoundingClientRect().top) / k) : 0;
+  const pg = document.createElement('div');
+  pg.className = 'v3-ap-page';
+  pg.dataset.artist = a.artist;
+  pg.style.top = top.toFixed(1) + 'px';
+  pg.innerHTML = `
+    <div class="v3-ap-page-hd">
+      <div class="v3-ap-page-title">Popular songs</div>
+      <div class="v3-ap-page-sub">${_sdsEsc(a.artist)} · ${scr._apList.length} songs</div>
+    </div>
+    <div class="v3-ap-songs">${apSongsHtml(scr._apList, a)}</div>`;
+  pg.style.background = getComputedStyle(scr).backgroundColor;   // the shell's own colour, dark or cream
+  /* Before the nav, at the nav's z (5): same stacking level, so the later nav
+     still floats over the page's rows. */
+  const nav = scr.querySelector('.v3-bottom-nav');
+  if (nav && nav.parentElement) nav.parentElement.insertBefore(pg, nav); else scr.appendChild(pg);
+  requestAnimationFrame(() => pg.classList.add('open'));
+};
+window.apCloseSongsPage = function (scr) {
+  const pg = scr && scr.querySelector('.v3-ap-page');
+  if (!pg) return false;
+  pg.classList.remove('open');
+  setTimeout(() => pg.remove(), 260);
+  return true;
 };
 // Deezer gives no rating: one seeded per song (3.4–4.8), the same every time, like the tracklists'.
 function apSongRating(title, album) {
@@ -1286,6 +1402,7 @@ window.exitToBento = function (scr) {
   scr.classList.remove('s-home-v3--review');
   scr.classList.remove('s-home-v3--album');
   scr.classList.remove('s-home-v3--artist');
+  scr.querySelectorAll('.v3-ap-page').forEach(pg => pg.remove());
   scr.classList.remove('v3-rev-title-2line');
   scr._sdPage = false;
   scr.style.removeProperty('--rev-cred-h');   // the album page's measured reserve (sdFitBlue)
@@ -2250,8 +2367,9 @@ window.fbArtistTap = function (el, e) {
 // Open the artist page for an artist by name, arriving from another screen
 // (e.g. the playlists Artists tab) — mirrors openAlbumPage: go home, enter the
 // --artist state, and Back returns to the origin screen.
-window.openArtistPageFor = function (artistName) {
-  const album = (window.ARCHIVE || []).find(a => a.artist === artistName);
+window.openArtistPageFor = function (artistName, fallbackAlbum) {
+  // fallbackAlbum (11-23): a review's own record, for an artist not on the shelf.
+  const album = (window.ARCHIVE || []).find(a => a.artist === artistName) || (fallbackAlbum && fallbackAlbum.artist === artistName ? fallbackAlbum : null);
   if (!album) return;
   window.activeAlbum = album;
   const enter = s => {
@@ -2473,6 +2591,8 @@ window.playPreview = function (el, e) {
 window.sdHeaderBack = function (btn) {
   const scr = btn.closest('.app-screen');
   if (!scr) return;
+  if (scr.querySelector('.v3-ap-page.open') && apCloseSongsPage(scr)) return;   // the artist's Popular songs page
+  if (scr.querySelector('.prof-list-page.open') && profListClose(scr)) return;  // a profile list's page
   if ((scr.classList.contains('s-home-v3--rvp') || scr.classList.contains('s-rvp')) && typeof rvpBack === 'function') return rvpBack();
   if (scr.classList.contains('s-home-v3--review')) { const lp = scr.querySelector('.v3-live-pill'); if (lp) return onLivePill(lp); }
   // Trending's Carousel (beta) view: back out to Browse (Eric, 2026-11-04).
@@ -3047,8 +3167,18 @@ function refreshSongRatings(scr) {
     if (next && cell.outerHTML !== next.outerHTML) cell.replaceWith(next);
   });
 }
+/* QUICK LIKE ON THE ALBUM PAGE (csharpdeveloper, Eric 11-23: "add a heart icon
+   to the left of the comment bubble that lets u quick like a song"). The artist
+   page's heart (`.v3-ap-like`, apSongLike), same `song::` fav flag as the review
+   sheet's. With a heart of its own, the track number no longer turns into one
+   (SONG_NUM_HEART false; true brings that back). */
+const SONG_NUM_HEART = false;
+function songLikeHtml(album, title) {
+  const fav = songIsFav(album, title);
+  return `<span class="v3-ap-like${fav ? ' on' : ''}" role="button" aria-label="Like ${_revAttr(title)}" aria-pressed="${fav}" onclick="event.stopPropagation(); apSongLike(this)">${typeof RVP_HEART !== 'undefined' ? RVP_HEART : '♥'}</span>`;
+}
 function songNumHtml(album, title, i) {
-  return songIsFav(album, title)
+  return SONG_NUM_HEART && songIsFav(album, title)
     ? `<span class="v3-song-fav">${typeof RVP_HEART !== 'undefined' ? RVP_HEART : '♥'}</span>`
     : String(i + 1);
 }
@@ -3058,6 +3188,8 @@ function refreshSongFavs(scr) {
     const cell = row.querySelector('.v3-song-num'); if (!cell) return;
     const want = songNumHtml(a, row.dataset.title, i);
     if (cell.innerHTML !== want) cell.innerHTML = want;
+    const like = row.querySelector('.v3-ap-like');
+    if (like) { const on = songIsFav(a, row.dataset.title); like.classList.toggle('on', on); like.setAttribute('aria-pressed', String(on)); }
   });
 }
 // The tracklist shows its first SONGS_SHOWN rows; a longer album gets a
@@ -3081,6 +3213,7 @@ function populateSongList(scr, all) {
     <div class="v3-song-head">
       <span class="v3-song-num"></span>
       <span class="v3-song-title">Song</span>
+      <span class="v3-ap-like-h"></span>
       <span class="v3-song-dur">Comments</span>
       <span class="v3-song-rate">Rating</span>
     </div>
@@ -3093,9 +3226,10 @@ function populateSongList(scr, all) {
          whole row opens the song popup, where the thread is. */
       const ck = songCmtKey(s.title, a.album), ct = songCmtTotal(s.title, a.album);
       return `
-    <button class="v3-song-row" onclick="event.stopPropagation(); openSongLog(this)" data-title="${s.title}">
+    <button class="v3-song-row" onclick="event.stopPropagation(); openSongLog(this)" data-title="${s.title}" data-album="${_revAttr(a.album)}">
       <span class="v3-song-num">${songNumHtml(a, s.title, i)}</span>
       <span class="v3-song-title">${s.title}</span>
+      ${songLikeHtml(a, s.title)}
       <span class="v3-song-dur v3-song-cmt">${CMT_SVG}<span class="v3-song-cmt-n" data-k="${_revAttr(ck)}" data-n="${ct}">${cmtCount(ck, ct) || ''}</span></span>
       ${songRateHtml(a, s)}
     </button>`;
@@ -4126,8 +4260,26 @@ function recordWhoHtml(r) {
    recordWhoHtml has it. */
 function splitRecordHtml(r) {
   return `<span class="v3-rev-record-line"><span class="v3-rev-record-album">${r.album}</span>${r.year ? `<span class="v3-rev-record-year">${r.year}</span>` : ''}</span>` +
-    (r.artist ? `<span class="v3-rev-record-artist">${r.artist}</span>` : '');
+    (r.artist ? `<span class="v3-rev-record-artist" data-artist="${_revAttr(r.artist)}" onclick="sdArtistTap(this, event)">${r.artist}</span>` : '');
 }
+/* THE ARTIST NAME OPENS THE ARTIST (csharpdeveloper, Eric 11-23: "i cant press
+   the artist after reviewing on the album page … i cant press the artist in the
+   inner review page when we open a review on the homepage"). In a review card's
+   record line and the review sheet's, the artist sat inside the album's tap
+   target, so it opened the album. Now it is its own target. The review's own
+   record (REV_INDEX) rides along for an artist who isn't on the shelf. */
+window.sdArtistTap = function (el, e) {
+  if (e) e.stopPropagation();
+  const name = el && el.dataset.artist;
+  if (!name) return;
+  const card = el.closest('.v3-rev-card');
+  const sheetRev = el.closest('.v3-rsh-body') && el.closest('.v3-rsh-body').querySelector('.v3-fbr--sheet');
+  const R = (card && REV_INDEX[card.dataset.k]) || (sheetRev && REV_INDEX[sheetRev.dataset.k]) || null;
+  sdHaptic(6);
+  if (el.closest('.v3-rsh-ov') && typeof closeReviewSheet === 'function') closeReviewSheet();
+  if (el.closest('.s-home-v3--rvp') && typeof rvpBack === 'function') rvpBack();
+  openArtistPageFor(name, R && R.album);
+};
 function revCardHtml(o) {
   return `
     <div class="v3-rev-card${o.cls ? ' ' + o.cls : ''}" data-k="${_revAttr(o.key)}"${o.feed != null ? ` data-feed="${o.feed}"` : ''} onclick="cmtCardTap(this)">${revCardInner(o)}
@@ -5884,12 +6036,12 @@ function rshBodyHtml(R, page) {
              does (Eric, 2026-09-25). At the TOP of the sheet, over the review (Eric, 2026-10-28). It played a 30s preview before, and
              previews are not a feature — see PREVIEWS_ENABLED. -->
         <div class="v3-rsh-record${page ? ' v3-rsh-record--page' : ''}" onclick="rshRecordTap(this)" title="Open the album">
-          <div class="v3-rsh-art" style="background-image:url('${a.image || ''}')"></div>
+          ${page ? '' : `<div class="v3-rsh-art" style="background-image:url('${a.image || ''}')"></div>`}
           <div class="v3-rsh-rec-who">
             <span class="v3-rsh-rec-album">${a.album || ''}</span>
-            <span class="v3-rsh-rec-artist">${a.artist || ''}${a.year ? ` · ${a.year}` : ''}</span>
+            <span class="v3-rsh-rec-artist"><span class="v3-rsh-rec-artist-n" data-artist="${_revAttr(a.artist || '')}" onclick="sdArtistTap(this, event)">${a.artist || ''}</span>${a.year ? ` · ${a.year}` : ''}</span>
           </div>
-          ${page ? rvpRecSideHtml(a) : `<div class="v3-rsh-cd" style="background-image:url('${a.image || ''}')" title="Listen on…" onclick="rshCdTap(this, event)"><div class="v3-cd-hole"></div></div>`}
+          ${page ? '' : `<div class="v3-rsh-cd" style="background-image:url('${a.image || ''}')" title="Listen on…" onclick="rshCdTap(this, event)"><div class="v3-cd-hole"></div></div>`}
         </div>
         <div class="v3-fbr v3-fbr--sheet${R.popular ? ' is-popular' : ''}" data-k="${_revAttr(key)}">
           <div class="v3-fbr-head">
@@ -9466,8 +9618,15 @@ function logPosted() {
    closing the sheet and coming back locks it again.
    ⚠ `dirty` unlocks too: reopening on unsaved work (a WIP) drops you back
    where you were, and that work is already mid-edit. */
+/* NO LOCK (csharpdeveloper, Eric 11-23: "when u go back to a review i dont
+   want to press edit just let me edit and say when the changes are made at the
+   top … keep the trash icon though"). LOG_LOCK false: a posted review opens
+   editable, the bar is [Post review, dimmed until a change] + [trash], and the
+   `.sd-log-changed` line at the top of the sheet says when there are unsaved
+   changes (paintLogSave). true brings the Edit review gate back. */
+const LOG_LOCK = false;
 function logLocked() {
-  return !!SDLOG && !SDLOG.unlocked && !SDLOG.dirty && logPosted();
+  return LOG_LOCK && !!SDLOG && !SDLOG.unlocked && !SDLOG.dirty && logPosted();
 }
 /* The nudge: a touch on a locked control floats "edit review" over the bar for
    a moment instead of changing anything. ONE timer, restarted — brushing three
@@ -9527,6 +9686,8 @@ function paintLogSave() {
     bar.hidden = !dirty && !posted;
     if (bar.hidden) bar.classList.remove('is-nudging');
   }
+  const chg = document.querySelector('#sd-log .sd-log-changed');
+  if (chg) chg.hidden = !(dirty && posted);
   paintLogLock();
 }
 /* What the library tabs need to draw — and reopen — an album that has since
@@ -9775,6 +9936,11 @@ function ensureLogSheet() {
   ov.innerHTML = `
     <div class="sd-log-sheet" role="dialog" aria-modal="true">
       <div class="sd-log-grab"></div>
+      <!-- CHANGES MADE (11-23): shown while a POSTED review has unsaved edits. -->
+      <div class="sd-log-changed" role="status" hidden>
+        <span class="sd-log-changed-dot"></span><span class="sd-log-changed-t">Changes made</span>
+        <button class="sd-log-changed-save" type="button">Post changes</button>
+      </div>
       <div class="sd-log-head">
         <!-- ONE button, centred over the cover (Eric, 2026-09-25): POST while
              there is something to post, REVISE once it is — a tap on Revise
@@ -9851,6 +10017,7 @@ function ensureLogSheet() {
   ov.addEventListener('mousedown', e => e.stopPropagation());
   ov.querySelector('.sd-log-sheet').addEventListener('click', e => e.stopPropagation());
   ov.querySelector('.sd-log-savebtn').addEventListener('click', e => { e.stopPropagation(); commitLog(); });
+  ov.querySelector('.sd-log-changed-save').addEventListener('click', e => { e.stopPropagation(); commitLog(); });
   /* Edit review: UNLOCK, then put the cursor at the end of the review. Save
      changes takes Edit's place (dimmed until something actually changes). */
   ov.querySelector('.sd-log-editbtn').addEventListener('click', e => {
@@ -10191,7 +10358,20 @@ window.openLogSheet = function(triggerEl, subject, opts) {
   ov.querySelector('.sd-log-cover').style.backgroundImage = `url("${subj.image}")`;
   ov.querySelector('.sd-log-album').textContent = subj.title;
   ov.querySelector('.sd-log-year').textContent = subj.year || '';   // :empty hides it (songs / artists)
-  ov.querySelector('.sd-log-artist').textContent = subj.subtitle;
+  const artEl = ov.querySelector('.sd-log-artist');
+  artEl.textContent = subj.subtitle;
+  /* The artist under the title opens the artist (11-23, Eric: "i cant press
+     the artist after reviewing on the album page"). Albums only — on a song's
+     sheet this line is the album's name. */
+  const isAlbumSubj = !subj.isSong && !subj.isArtist && !!subj.subtitle;
+  artEl.classList.toggle('is-link', isAlbumSubj);
+  artEl.onclick = isAlbumSubj ? (e => {
+    e.stopPropagation();
+    sdHaptic(6);
+    const alb = subj.ref || (window.ARCHIVE || []).find(x => x.album === subj.title && x.artist === subj.subtitle) || null;
+    closeLogSheet();
+    openArtistPageFor(subj.subtitle, alb);
+  }) : null;
   ov.querySelector('.sd-log-write').value = SDLOG.text;
   ov.querySelector('.sd-log-write').classList.toggle('has-text', !!(SDLOG.text || '').trim());
   ov.querySelectorAll('.sd-log-opt').forEach(b => b.classList.toggle('on', !!SDLOG[b.dataset.k]));
@@ -13154,6 +13334,7 @@ window.applyPersona = function (id) {
     window.ARCHIVE = BASE_ARCHIVE;
     window.ARTIST_IMG = Object.assign({}, BASE_ARTIST_IMG);
   }
+  sdArtistPicsAdopt();
   const A = window.ARCHIVE;
   window._pinnedReview = null;
   if (p) {
@@ -14534,6 +14715,43 @@ window.profPicksTab = function (btn) {
     b.setAttribute('aria-selected', on ? 'true' : 'false');
   });
   sec.querySelectorAll('.prof-picks-pane').forEach(p => { p.hidden = p.dataset.k !== k; });
+};
+/* A LIST BOX'S PAGE (csharpdeveloper, Eric 11-23; profListsHtml, screens.js):
+   laid over the profile under the app header, the same way the artist page's
+   Popular songs page is (apMoreSongs). Its own back caret closes it (your own
+   profile has no header caret, only the gear), and sdHeaderBack checks it first
+   for a friend's. Favorites carries home-style Fav songs / Fav albums tabs. */
+window.profListOpen = function (box) {
+  const scr = box && box.closest('.app-screen');
+  const def = typeof PROF_LIST_BOXES !== 'undefined' && PROF_LIST_BOXES.find(b => b[0] === box.dataset.k);
+  if (!scr || !def) return;
+  sdHaptic(6);
+  scr.querySelectorAll('.prof-list-page').forEach(pg => pg.remove());
+  const hdr = scr.querySelector('.v3-header');
+  const k = scr.getBoundingClientRect().height / (scr.offsetHeight || 1) || 1;
+  const top = hdr ? Math.max(0, (hdr.getBoundingClientRect().bottom - scr.getBoundingClientRect().top) / k) : 0;
+  const pg = document.createElement('div');
+  pg.className = 'prof-list-page';
+  pg.style.top = top.toFixed(1) + 'px';
+  pg.style.background = getComputedStyle(scr).backgroundColor;
+  pg.innerHTML = `
+    <div class="prof-list-page-hd">
+      <button class="prof-list-page-back" type="button" aria-label="Back" onclick="event.stopPropagation(); profListClose(this.closest('.app-screen'))">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="prof-list-page-title">${def[1]}</div>
+    </div>
+    ${profPicksHtml(window.PROFILE || {}, def[3])}`;
+  const nav = scr.querySelector('.v3-bottom-nav');
+  if (nav && nav.parentElement) nav.parentElement.insertBefore(pg, nav); else scr.appendChild(pg);
+  requestAnimationFrame(() => pg.classList.add('open'));
+};
+window.profListClose = function (scr) {
+  const pg = scr && scr.querySelector('.prof-list-page');
+  if (!pg) return false;
+  pg.classList.remove('open');
+  setTimeout(() => pg.remove(), 260);
+  return true;
 };
 /* A row opens its album. Found by name + artist (a title alone collides), and
    a record that has since left ARCHIVE — the rec pool is re-dealt each load —

@@ -2034,7 +2034,7 @@ function profReviewRowHtml(P, e) {
 const PROF_PIN_MAX = 3;
 window.profPins = function (P) {
   if (Array.isArray(P.pins)) return P.pins.slice(0, PROF_PIN_MAX);
-  return profReviewLog(P).slice(0, 2).map(e => e.album.album);
+  return profReviewLog(P).slice(0, PROF_PIN_MAX).map(e => e.album.album);   // 3 (Eric 11-23; was 2)
 };
 /* One of their reviews as THE HOME FEED'S CARD (Eric, 2026-09-18) — byline,
    the number over the discs on the left, the record (cover · year · album ·
@@ -2159,8 +2159,9 @@ const PROF_PICK_TABS = [
   ['listened', 'Listened',        'Nothing logged as listened yet.'],
   ['later',    'Listen later',    'Nothing queued yet — tap the clock on an album.'],
 ];
-function profPicksHtml(P) {
+function profPicksHtml(P, keys) {
   const L = profPicksLists(P);
+  const TABS = keys ? PROF_PICK_TABS.filter(t => keys.includes(t[0])) : PROF_PICK_TABS;
   const at = s => String(s == null ? '' : s)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const playIco = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
@@ -2184,15 +2185,43 @@ function profPicksHtml(P) {
                   </span>
                   ${tail(r, k)}
                 </button>`;
-  const first = PROF_PICK_TABS[0][0];
+  const first = TABS[0][0];
   return `
-            <div class="prof-sec prof-picks">
-              <div class="prof-picks-seg" role="tablist">${PROF_PICK_TABS.map(([k, label]) => `
-                <button class="prof-picks-tab${k === first ? ' active' : ''}" role="tab" aria-selected="${k === first}" data-k="${k}" onclick="profPicksTab(this)">${label}</button>`).join('')}
-              </div>${PROF_PICK_TABS.map(([k, , empty]) => `
+            <div class="prof-sec prof-picks">${TABS.length > 1 ? `
+              <div class="wall2-bar v3-feed-tabs prof-picks-seg" role="tablist">${TABS.map(([k, label]) => `
+                <button class="wall2-cat prof-picks-tab${k === first ? ' active' : ''}" role="tab" aria-selected="${k === first}" data-k="${k}" onclick="profPicksTab(this)">${label}</button>`).join('')}
+              </div>` : ''}${TABS.map(([k, , empty]) => `
               <div class="prof-songs prof-picks-pane" data-k="${k}"${k === first ? '' : ' hidden'}>${
                 L[k].length ? L[k].map(r => row(r, k)).join('') : `<div class="prof-pins-empty">${empty}</div>`}
               </div>`).join('')}
+            </div>`;
+}
+
+/* THE LISTS AS THREE BOXES (csharpdeveloper, Eric 11-23: "below [the pinned
+   reviews] can we have the three icons favorites listened and listen later and
+   have boxes around these 3x1 row where it says click to view their lists").
+   They replace the tabbed picker that sat above the pins. A box opens that list
+   on its own page (profListOpen, app.js); Favorites holds Fav songs + Fav albums
+   behind home-style tabs, the other two are one list each (profPicksHtml with
+   the keys it should show). */
+const PROF_LIST_BOXES = [
+  ['fav',      'Favorites',    'heart', ['songs', 'albums']],
+  ['listened', 'Listened',     'ear',   ['listened']],
+  ['later',    'Listen later', 'clock', ['later']],
+];
+function profListsHtml(P) {
+  const L = profPicksLists(P);
+  const ico = (typeof SD_ICONS !== 'undefined') ? SD_ICONS : {};
+  return `
+            <div class="prof-sec prof-lists">${PROF_LIST_BOXES.map(([k, label, icon, keys]) => {
+              const n = keys.reduce((t, x) => t + (L[x] || []).length, 0);
+              return `
+              <button class="prof-list-box" type="button" data-k="${k}" onclick="profListOpen(this)">
+                <span class="prof-list-ico">${ico[icon] || ''}</span>
+                <span class="prof-list-lbl">${label}</span>
+                <span class="prof-list-n">${n} ${n === 1 ? 'item' : 'items'}</span>
+                <span class="prof-list-go">Tap to view list</span>
+              </button>`; }).join('')}
             </div>`;
 }
 
@@ -2338,18 +2367,17 @@ function profileHtml(light) {
                  No backticks here: template. -->
             ${profFavsHtml(P)}
 
-            <!-- The picks — Fav songs · Fav albums · Listened · Listen later,
-                 one picker ABOVE the pins. No backticks here: template. -->
-            ${profPicksHtml(P)}
-
             ${profPinsHtml(P)}
 
-            <!-- Review history — last section on the page, deliberately: it is
-                 the longest and the one you scroll INTO, not past. -->
-            <div class="prof-feed">
-              <div class="prof-feed-hd">Review history</div>
-              ${logHtml}
-            </div>
+            <!-- The lists — Favorites · Listened · Listen later as three boxes
+                 UNDER the pins (11-23; the tabbed picker that sat above the pins
+                 is now each box's page). No backticks here: template. -->
+            ${profListsHtml(P)}
+
+            <!-- Review history is OFF the profile (Eric 11-23: "below the three
+                 icons can we not have review history"). logHtml is still built
+                 (it registers each card in REV_INDEX); put the prof-feed block
+                 back here to bring it back. No backticks here: template. -->
 
           </div>
         </div>

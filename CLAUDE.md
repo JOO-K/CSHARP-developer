@@ -54,6 +54,64 @@
 > beside Assets (made in assets.js, same gate) opens that page. Profile
 > favourites wheel `PROF_ARC_DEG` back to 24 (tighter, rounder).
 
+> **ARTIST PAGE POPULAR SONGS round 4 (2026-11-23)** — rows pad 4px inside
+> `.v3-artist-albums`' 12px (contents 16px from the edge, the review cards'
+> line); bigger cover (44) / bubble (16) / type; a like heart per row
+> (`.v3-ap-like` → `apSongLike`, the same `song::<title>::<album>` fav as the
+> review sheet's heart). Rows come from one builder, `apSongsHtml`. **View more
+> opens a Popular songs PAGE** (`apMoreSongs` → `.v3-ap-page`, all ≤50 Deezer
+> top tracks) laid over the artist page under the header, before the nav at z 5;
+> the header caret / edge swipe closes it (`apCloseSongsPage`, checked first in
+> `sdHeaderBack`); `exitToBento` and a different artist remove it.
+
+> **SWIPE RAIL ON BIG PHONES (2026-11-23)** — the 36px / 20px-gap big-phone
+> rail (11-16) stacked on the 1.12× big-phone zoom; both hooks
+> (`html.sd-bigphone`, `@container min-width 420px`) now give 28px icons, 12px
+> gaps, 9px labels, 28px streaming tiles (end of doomscroll.css).
+> **LYRICS MODE CLEAR OF THE NAV + THREE LINES (2026-11-23)** — quotes.css end:
+> the song block and CD dock sit at bottom 96px (were 30, under the nav),
+> smaller (score 34, title 16, CD 72); the body ends at 250px. Karaoke shows
+> three lines: before (dim) · being sung (ball) · next (grey) in `.qs-lprev /
+> .qs-lcur / .qs-lnext` (`lyrSlots`, `setCtx`, `box._ctx` in quotes.js). In a
+> pause the upcoming line waits in the middle, grey, without the ball.
+> **SWIPE: ONE RAIL (2026-11-23)** — the left rail (Share · Reviews · Review +)
+> is gone; the right rail is Like · Listened · Later · Reviews · Share, then the
+> streaming icons (railHtml). The quick-review + is out (`sdDoomReview` kept,
+> unused). The CD sits 22px left of centre (`--ds-shift`, -22px, on `.ds-cd`, `.ds-score` and `.ds-title` at the end of
+> doomscroll.css; placeFixCd follows the spacer). Like–Later stay centred on
+> the CD (alignRail).
+> **REVIEW SHEET UNLOCKED + ARTIST NAMES TAPPABLE (2026-11-23)** — `LOG_LOCK =
+> false`: a posted review opens editable (no Edit review), the bar is Post
+> review (dimmed until a change) + trash, and `.sd-log-changed` ("Changes made ·
+> Post changes", sticky at the sheet's top) shows while a POSTED review has
+> unsaved edits (painted in `paintLogSave`). Artist names now open the artist
+> page: the review sheet's `.sd-log-artist` (album subjects; onclick set in
+> `openLogSheet`), a card's record-line `.v3-rev-record-artist` and the review
+> popup's `.v3-rsh-rec-artist-n` (both `sdArtistTap`, which closes the popup).
+> `openArtistPageFor(name, fallbackAlbum)` takes the review's own record for an
+> artist not on the shelf.
+> **NO REVIEW HISTORY ON THE PROFILE; ALBUM PAGE QUICK LIKE (2026-11-23)** —
+> the profile ends at the list boxes (the `prof-feed` block is out of
+> `profileHtml`; `logHtml` is still built). The album page's tracklist rows
+> carry the artist page's heart left of the comment bubble (`songLikeHtml` →
+> `apSongLike`, which now works on any `.v3-song-row` and syncs every copy;
+> `refreshSongFavs` repaints them after the review sheet's heart). The track
+> number no longer turns into a heart (`SONG_NUM_HEART = false`).
+> **PROFILE = HOME'S MARGINS + LIST BOXES (2026-11-23, later)** — review cards
+> (pins + history) bleed 2px so they sit 10px from the edges like home's, song
+> rows pad 4px (contents at 16), section heads on the 16px line. Pins default to
+> 3 (`profPins`). The tabbed picker is OFF the page: under the pins sits
+> `profListsHtml` — Favorites · Listened · Listen later as a 3×1 row of boxes
+> (`PROF_LIST_BOXES`); a box opens `profListOpen` → `.prof-list-page` (over the
+> profile under the header, its own back caret, `profListClose`, also checked in
+> `sdHeaderBack`), filled by `profPicksHtml(P, keys)` — Favorites keeps the Fav
+> songs / Fav albums tabs.
+> **PROFILE PICKS LOOK LIKE HOME'S TABS (2026-11-23)** — the Fav songs · Fav
+> albums · Listened · Listen later bar (`profPicksHtml`) carries home's
+> `wall2-bar v3-feed-tabs` / `wall2-cat` classes (bare words, gold + underline);
+> the block at the end of app.css only strips the old pill. `profPicksTab`
+> unchanged.
+
 > **SWIPE TOP BAR (2026-11-20)** — Eric: the Player button is off for now and
 > Comments is called **Lyrics** (still `sdDoomBeta('qs')`, now top RIGHT). The
 > genres button moved top LEFT and carries its label — For You / "Rock +1" /

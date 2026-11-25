@@ -440,15 +440,11 @@
         <!-- csharpdeveloper (Eric 11-09): "get rid of the x and put the other
              experiences there" - Comments and Player (beta) sit where the X was;
              the nav is the way out now. No backticks: template literal. -->
-        <div class="ds-topl">
-          <!-- csharpdeveloper (Eric 11-20): the genre pill leads, labelled with
-               what the feed deals (For You / a genre / Everything) so people see
-               it is a choice; Player is off for now, Comments is Lyrics mode. -->
-          <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}<span>${esc(genreLabel())}</span></button>
-        </div>
-        <span class="ds-credit">Previews by Deezer</span>
+        <!-- csharpversioncontrol (Eric 11-23): the Deezer credit is gone, the
+             genre pill sits top right, and Lyrics mode moved inside the
+             Genres sheet so the top bar stays quiet. -->
         <div class="ds-topr">
-          <button class="ds-modebtn" aria-label="Lyrics mode (beta)" onclick="event.stopPropagation(); sdDoomBeta('qs')">${ICO.quote}<span>Lyrics</span></button>
+          <button class="ds-genbtn${DS.mode === 'genres' ? ' on' : ''}" aria-label="Genres" onclick="event.stopPropagation(); sdDoomGenreSheet()">${ICO.genre}<span>${esc(genreLabel())}</span></button>
         </div>
       </div>
       <div class="ds-scroll"></div>
@@ -474,6 +470,7 @@
         <div class="ds-gpanel" onclick="event.stopPropagation()">
           <div class="ds-gnub"></div>
           <div class="ds-ghd"><b>Genres</b><button class="ds-gclear" onclick="sdDoomGenreClear()">Show everything</button></div>
+          <button class="ds-glyr" onclick="sdDoomGenreClose(); sdDoomBeta('qs')">${ICO.quote}<span><b>Lyrics mode</b><small>Albums with their lyrics, line by line</small></span><i>›</i></button>
           <div class="ds-glist"></div>
           <button class="ds-ggo" onclick="sdDoomGenreCommit()" hidden>Pick genres</button>
         </div>
@@ -518,12 +515,13 @@
         <button class="ds-rbtn ds-fav${d.fav ? ' on' : ''}" aria-label="Favorite" onclick="event.stopPropagation(); sdDoomFav(this, ${i})"><b class="ds-likes">${albumLikes(i)}</b>${ICO.heart}<span>Like</span></button>
         <button class="ds-rbtn ds-listened${d.listened ? ' on' : ''}" aria-label="Listened" onclick="event.stopPropagation(); sdDoomFlag(this, ${i}, 'listened')">${ICO.ear}<span>Listened</span></button>
         <button class="ds-rbtn ds-later${d.later ? ' on' : ''}" aria-label="Listen later" onclick="event.stopPropagation(); sdDoomFlag(this, ${i}, 'later')">${ICO.clock}<span>Later</span></button>
-        <div class="ds-rail-svcs"><span class="ds-rail-sep"></span>${svc}</div>
-      </div>
-      <div class="ds-lrail">
-        <button class="ds-rbtn ds-share" aria-label="Share" onclick="event.stopPropagation(); sdDoomShare(this, ${i})">${ICO.share}<span>Share</span></button>
+        <!-- ONE RAIL (csharpdeveloper, Eric 11-23: "get rid of the quick review
+             button … put reviews and share on the right side below listened and
+             later with reviews above the share"). The left rail and its Review
+             (+) button are gone; sdDoomReview is kept, unused. -->
         <button class="ds-rbtn ds-cmt" aria-label="Reviews and comments" onclick="event.stopPropagation(); sdDoomReviews(${i})">${ICO.cmt}<span>Reviews</span></button>
-        <button class="ds-rbtn ds-add${d.rating > 0 || (d.text || '').trim() ? ' on' : ''}" aria-label="Write a review" onclick="event.stopPropagation(); sdDoomReview(this, ${i})">${ICO.plus}<span>Review</span></button>
+        <button class="ds-rbtn ds-share" aria-label="Share" onclick="event.stopPropagation(); sdDoomShare(this, ${i})">${ICO.share}<span>Share</span></button>
+        <div class="ds-rail-svcs"><span class="ds-rail-sep"></span>${svc}</div>
       </div>`;
   }
 
@@ -596,15 +594,42 @@
     /* Like · Listened · Later are centred on the CD (round 25), so both rails
        sit beside the disc; the streaming icons and the left rail are then
        lined up from there, as before. */
+    /* TWO COLUMNS, SAME DISTANCE FROM THE WALLS (csharpversioncontrol, Eric
+       11-23; a ring round the disc was tried and dropped). The CD is centred;
+       Like · Listened · Later stand in a straight column on the right and
+       Reviews · Share on the left, level with Like and Later. Both columns'
+       centres sit EDGE px in from their side of the card, so the two sides
+       mirror. If a disc would crowd the columns, the disc shrinks
+       (max-width; placeFixCd, queued above, follows). Buttons are absolute
+       inside .ds-rail (which only flows the streaming icons now). */
     const rail = card.querySelector('.ds-rail'), cdEl = card.querySelector('.ds-cd');
-    const fav = card.querySelector('.ds-fav svg'), later = card.querySelector('.ds-later');
-    if (rail && cdEl && fav && later) {
-      const c = cdEl.getBoundingClientRect(), k = card.getBoundingClientRect();
+    if (rail && cdEl) {
+      const SPOTS = [['.ds-fav', 'R', -1], ['.ds-listened', 'R', 0], ['.ds-later', 'R', 1], ['.ds-cmt', 'L', -1], ['.ds-share', 'L', 1]];
+      const k = card.getBoundingClientRect();
+      let c = cdEl.getBoundingClientRect();
       if (c.height) {
-        const mid = (fav.getBoundingClientRect().top + later.getBoundingClientRect().bottom) / 2;
-        const top = (rail.getBoundingClientRect().top - k.top) / scale0;
+        SPOTS.forEach(([sel]) => { const b = rail.querySelector(sel); if (b) b.classList.add('ds-orbit'); });   // measure at their column size
+        const W = card.offsetWidth;
+        const half = Math.max(...SPOTS.map(([sel]) => { const b = rail.querySelector(sel); return b ? b.offsetWidth / 2 : 0; }));
+        const EDGE = half + 12;                     // wall → column centre, both sides
+        const Rmax = W / 2 - EDGE - half - 8;       // the disc stops 8px short of the widest label
+        cdEl.style.maxWidth = '';
+        c = cdEl.getBoundingClientRect();
+        if (c.width / 2 / scale0 > Rmax) { cdEl.style.maxWidth = (2 * Rmax).toFixed(1) + 'px'; c = cdEl.getBoundingClientRect(); }
         rail.style.bottom = 'auto'; rail.style.transform = 'none';
-        rail.style.top = (top + ((c.top + c.height / 2) - mid) / scale0).toFixed(1) + 'px';
+        rail.style.top = ((c.top - k.top) / scale0).toFixed(1) + 'px';
+        const rr = rail.getBoundingClientRect();
+        const railLeft = (rr.left - k.left) / scale0;
+        const cy = (c.top + c.height / 2 - rr.top) / scale0;
+        const STEP = Math.min(80, c.height / 2 / scale0 * 0.62);   // row pitch, kept inside the disc's height
+        SPOTS.forEach(([sel, side, row]) => {
+          const btn = rail.querySelector(sel), ico = btn && btn.querySelector('svg');
+          if (!btn || !ico) return;
+          const px = (side === 'R' ? W - EDGE : EDGE) - railLeft, py = cy + row * STEP;
+          const ib = ico.getBoundingClientRect(), bb = btn.getBoundingClientRect();   // an <svg> has no offsetTop
+          btn.style.left = (px - btn.offsetWidth / 2).toFixed(1) + 'px';
+          btn.style.top = (py - ((ib.top - bb.top) + ib.height / 2) / scale0).toFixed(1) + 'px';
+        });
       }
     }
     const lr = card.querySelector('.ds-lrail'), lis = card.querySelector('.ds-listened'), rv = lr && lr.querySelector('.ds-cmt');

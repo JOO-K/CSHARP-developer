@@ -181,7 +181,7 @@
       <div class="qs-scroll"><div class="qs-wait"><span class="qs-spin"></span>Finding songs…</div></div>
       <div class="qs-top">
         <button class="ds-ibtn" aria-label="Close comments mode" onclick="event.stopPropagation(); sdQuoteClose(); if (window.sdBetaBack) sdBetaBack()">${ICO.close}</button>
-        <span class="qs-credit">Previews by Deezer</span>
+        <!-- csharpversioncontrol 11-23: Deezer credit removed (Eric) -->
         <button class="cp-genre qs-genre" onclick="event.stopPropagation(); sdQuoteGenres()">
           <svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg><span>${esc(Q.genre || '')}</span>
         </button>
@@ -528,7 +528,7 @@
     LIVE.set(String(id), entry);
     const k = Q.list.findIndex(x => String(x.t.id) === String(id));
     const b = k >= 0 && cardAt(k) && cardAt(k).querySelector('.qs-lyr');
-    if (b) { b._li = undefined; b.querySelectorAll('.qs-ln').forEach(n => n.remove()); }
+    if (b) { b._li = undefined; b._ctx = undefined; b.querySelectorAll('.qs-ln').forEach(n => n.remove()); }
   };
   function liveFor(it) {
     const id = String(it.t.id);
@@ -582,7 +582,7 @@
       if (live && live.l && live.l.length) L = live;
       else { if (DESC) describe(box, it.t.id, it, live); return; }
     }
-    if (box._desc) { box.innerHTML = ''; box._desc = null; box._li = undefined; }   // the Listening / description slot gives way
+    if (box._desc) { box.innerHTML = ''; box._desc = null; box._li = undefined; box._ctx = undefined; }   // the Listening / description slot gives way
     // captions of what was heard, not official lyrics: the page says so
     if (!!L.heard !== box.hasAttribute('data-heard')) box.toggleAttribute('data-heard', !!L.heard);
     /* The clock runs LYR_LEAD ahead (round 6): a word lit exactly as it's sung
@@ -596,7 +596,23 @@
       const show = ln[0] - 0.45, hide = Math.max(ln[1], (ln[2].length ? ln[2][ln[2].length - 1][1] : ln[0]) + 0.6);
       if (now >= show && now < Math.min(hide, next ? next[0] - 0.45 : hide)) { li = k; break; }
     }
-    if (li !== box._li) swapLine(box, li >= 0 ? L.l[li] : null);
+    /* THREE LINES (csharpdeveloper, Eric 11-23: "can we get like 3 lines of
+       lyrics, with just 1 line it skips a lot"): the line before (sung, dim),
+       the line being sung (the ball), the line coming up (grey). Between lines
+       the last one sung and the next one stay up, with the middle empty. */
+    let up = L.l.findIndex(ln => ln[0] - 0.45 > now);
+    if (up < 0) up = L.l.length;
+    // In a pause the line coming up waits in the middle, grey, so three lines always show.
+    const waiting = li < 0 && up < L.l.length;
+    if (waiting) li = up;
+    const prevI = li >= 0 ? li - 1 : up - 1, nextI = li >= 0 ? li + 1 : up;
+    const ctxKey = li + ':' + prevI + ':' + nextI;
+    if (ctxKey !== box._ctx) {
+      if (li !== box._li) swapLine(box, li >= 0 ? L.l[li] : null);
+      setCtx(box, '.qs-lprev', prevI >= 0 ? L.l[prevI] : null);
+      setCtx(box, '.qs-lnext', nextI < L.l.length ? L.l[nextI] : null);
+      box._ctx = ctxKey;
+    }
     box._li = li;
     if (li < 0) return;
     const line = box.querySelector('.qs-ln:not(.out)');
@@ -616,6 +632,7 @@
     const P = line._pos;
     let x, y, hop;
     const calmNow = calm();
+    ball.style.opacity = (k < 0 && words[0][1] - now > 0.45) ? '0' : '';   // no ball while the line only waits
     if (k < 0) {
       const t0 = words[0][1], lead = 0.45, f = Math.max(0, Math.min(1, 1 - (t0 - now) / lead));
       x = P[0].x - 18 * (1 - f); y = P[0].y; hop = (1 - f) * BALL_H;
@@ -632,8 +649,28 @@
     if (calmNow) hop = 0;
     ball.style.transform = `translate(${x.toFixed(1)}px, ${(y - hop).toFixed(1)}px)`;
   }
+  // The three slots (prev · current · next); describe() may have replaced them.
+  function lyrSlots(box) {
+    if (!box.querySelector('.qs-lcur')) {
+      box.innerHTML = '<div class="qs-lprev"></div><div class="qs-lcur"></div><div class="qs-lnext"></div>';
+      box._ctx = undefined;
+    }
+    return box.querySelector('.qs-lcur');
+  }
+  // A context line (before / after): plain text, crossfaded.
+  function setCtx(box, sel, ln) {
+    lyrSlots(box);
+    const el = box.querySelector(sel);
+    const txt = ln && ln[2].length ? ln[2].map(w => w[0]).join(' ') : '';
+    if (el._t === txt) return;
+    el._t = txt;
+    el.classList.remove('in');
+    clearTimeout(el._to);
+    el._to = setTimeout(() => { el.textContent = txt; if (txt) requestAnimationFrame(() => el.classList.add('in')); }, el.textContent ? 160 : 0);
+  }
   // Fade the old line out, the new one in (grey until sung).
   function swapLine(box, ln) {
+    const slot = lyrSlots(box);
     box.querySelectorAll('.qs-ln:not(.out)').forEach(o => {
       o.classList.add('out');
       setTimeout(() => o.remove(), 380);
@@ -644,7 +681,7 @@
     d.innerHTML = '<span class="qs-ball"></span>' + ln[2].map(w => `<span class="qs-w">${esc(w[0])}</span>`).join(' ');
     d._w = ln[2];
     d._s = [...d.querySelectorAll('.qs-w')];
-    box.appendChild(d);
+    slot.appendChild(d);
     requestAnimationFrame(() => d.classList.add('in'));
   }
 
